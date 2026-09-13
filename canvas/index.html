@@ -38,6 +38,10 @@
     --danger: #d0533f;
     --shadow: 0 1px 2px rgba(20, 32, 43, 0.06), 0 8px 24px rgba(20, 32, 43, 0.08);
     --shadow-lift: 0 2px 6px rgba(20, 32, 43, 0.12), 0 16px 40px rgba(20, 32, 43, 0.16);
+    --metal: #e4e9ef;
+    --metal-2: #cfd8e2;
+    --metal-line: #94a3b1;
+    --duct: #c2ccd7;
     --sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
     --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
   }
@@ -63,6 +67,10 @@
       --danger: #ec6a54;
       --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.45);
       --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 50px rgba(0, 0, 0, 0.6);
+      --metal: #2e3e4d;
+      --metal-2: #253544;
+      --metal-line: #45596b;
+      --duct: #1f2d3a;
     }
   }
   :root[data-theme="dark"] {
@@ -86,6 +94,10 @@
     --danger: #ec6a54;
     --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 10px 30px rgba(0, 0, 0, 0.45);
     --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.5), 0 20px 50px rgba(0, 0, 0, 0.6);
+    --metal: #2e3e4d;
+    --metal-2: #253544;
+    --metal-line: #45596b;
+    --duct: #1f2d3a;
   }
 
   * { box-sizing: border-box; }
@@ -261,7 +273,29 @@
   .node .name { font-weight: 600; font-size: 13px; letter-spacing: -0.01em; }
   .node .kind { font-family: var(--mono); font-size: 10px; color: var(--ink-faint); margin-left: auto; text-transform: uppercase; letter-spacing: 0.05em; }
 
-  .node .body { padding: 10px 12px 12px; }
+  .node .body { padding: 8px 12px 12px; }
+
+  /* equipment schematics */
+  .art {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 4px 6px;
+    margin-bottom: 8px;
+  }
+  .art svg { display: block; width: 100%; height: auto; }
+  .eq line, .eq path, .eq polyline, .eq rect, .eq circle, .eq polygon {
+    vector-effect: non-scaling-stroke;
+  }
+  .eq-ahu .ahu-fan { transform-box: fill-box; transform-origin: center; }
+  @keyframes eq-spin { to { transform: rotate(360deg); } }
+  .content.playing .eq-ahu .ahu-fan { animation: eq-spin 1.3s linear infinite; }
+  .wx-sun { transform-box: fill-box; transform-origin: center; }
+  @keyframes eq-pulse { 0%,100% { opacity: 0.9; } 50% { opacity: 0.6; } }
+  .content.playing .wx-sun { animation: eq-pulse 2.4s ease-in-out infinite; }
+  @media (prefers-reduced-motion: reduce) {
+    .content.playing .eq-ahu .ahu-fan, .content.playing .wx-sun { animation: none; }
+  }
   .readout {
     font-family: var(--mono);
     font-variant-numeric: tabular-nums;
@@ -457,6 +491,19 @@ const TYPES = {
   weather: {
     label: "Weather", kind: "source",
     glyph: '<path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4M12 8a4 4 0 100 8 4 4 0 000-8z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+    art: () => `<svg class="eq eq-weather" viewBox="0 0 180 62" preserveAspectRatio="xMidYMid meet">
+      <g class="wx-sun">
+        <circle cx="44" cy="30" r="12" fill="var(--warm)"/>
+        <g stroke="var(--warm)" stroke-width="2" stroke-linecap="round">
+          <line x1="44" y1="10" x2="44" y2="4"/><line x1="44" y1="50" x2="44" y2="56"/>
+          <line x1="24" y1="30" x2="18" y2="30"/><line x1="64" y1="30" x2="70" y2="30"/>
+          <line x1="30" y1="16" x2="26" y2="12"/><line x1="58" y1="44" x2="62" y2="48"/>
+          <line x1="30" y1="44" x2="26" y2="48"/><line x1="58" y1="16" x2="62" y2="12"/>
+        </g>
+      </g>
+      <path d="M96 46 a11 11 0 0 1 20 -5 a9 9 0 0 1 12 9 h-34 a8 8 0 0 1 2 -4 z"
+            fill="var(--metal-2)" stroke="var(--metal-line)" stroke-width="1.5"/>
+    </svg>`,
     inputs: [], outputs: ["T_out", "irradiance"],
     params: { t_mean: 12, t_swing: 7, t_peak_hour: 15, solar_peak: 600, sunrise: 6, sunset: 19 },
     meta: [
@@ -483,6 +530,15 @@ const TYPES = {
   occupancy: {
     label: "Occupancy", kind: "source",
     glyph: '<path d="M9 11a3 3 0 100-6 3 3 0 000 6zM4 20v-1a5 5 0 015-5 5 5 0 015 5v1M17 11a3 3 0 100-6M20 20v-1a5 5 0 00-3-4.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    art: () => {
+      const person = (x, i) => `<g class="person" data-i="${i}" transform="translate(${x},0)">
+        <circle cx="0" cy="18" r="6" fill="var(--metal-2)" stroke="var(--metal-line)" stroke-width="1.5"/>
+        <path d="M-8 46 v-9 a8 11 0 0 1 16 0 v9 z" fill="var(--metal-2)" stroke="var(--metal-line)" stroke-width="1.5"/>
+      </g>`;
+      return `<svg class="eq eq-occ" viewBox="0 0 180 54" preserveAspectRatio="xMidYMid meet">
+        ${[42, 74, 106, 138].map((x, i) => person(x, i)).join("")}
+      </svg>`;
+    },
     inputs: [], outputs: ["Q_int"],
     params: { n_people: 4, gain_per_person: 100, arrive: 9, leave: 17 },
     meta: [
@@ -506,6 +562,27 @@ const TYPES = {
   ahu: {
     label: "Air handler", kind: "equipment",
     glyph: '<path d="M4 6h16v12H4zM8 12a4 4 0 108 0 4 4 0 00-8 0zM12 12l2.5-1.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    art: () => `<svg class="eq eq-ahu" viewBox="0 0 180 66" preserveAspectRatio="xMidYMid meet">
+      <rect x="8" y="6" width="150" height="42" rx="4" fill="var(--metal)" stroke="var(--metal-line)" stroke-width="1.5"/>
+      <line x1="44" y1="6" x2="44" y2="48" stroke="var(--metal-line)"/>
+      <line x1="80" y1="6" x2="80" y2="48" stroke="var(--metal-line)"/>
+      <line x1="116" y1="6" x2="116" y2="48" stroke="var(--metal-line)"/>
+      <g stroke="var(--metal-line)" stroke-width="2" stroke-linecap="round">
+        <line x1="14" y1="12" x2="24" y2="20"/><line x1="14" y1="22" x2="24" y2="30"/><line x1="14" y1="32" x2="24" y2="40"/>
+      </g>
+      <polyline points="50,10 56,44 62,10 68,44 74,10" fill="none" stroke="var(--metal-line)" stroke-width="1.5"/>
+      <path class="ahu-coil" d="M86 12 h24 v7 h-24 v7 h24 v7 h-24 v7 h24" fill="none" stroke="var(--metal-line)" stroke-width="2.5"/>
+      <g class="ahu-fan">
+        <circle cx="137" cy="27" r="15" fill="var(--metal-2)" stroke="var(--metal-line)" stroke-width="1.5"/>
+        <g stroke="var(--metal-line)" stroke-width="2" fill="none" stroke-linecap="round">
+          <path d="M137 27 q7 -10 13 -3"/><path d="M137 27 q10 7 3 13"/>
+          <path d="M137 27 q-7 10 -13 3"/><path d="M137 27 q-10 -7 -3 -13"/>
+        </g>
+        <circle cx="137" cy="27" r="3" fill="var(--metal-line)"/>
+      </g>
+      <rect x="40" y="48" width="16" height="14" fill="var(--duct)" stroke="var(--metal-line)" stroke-width="1.5"/>
+      <rect x="118" y="48" width="16" height="14" fill="var(--duct)" stroke="var(--metal-line)" stroke-width="1.5"/>
+    </svg>`,
     inputs: ["T_room"], outputs: ["T_supply", "Q_hvac"],
     params: { mode: 1, m_dot: 0.10, supply_setpoint: 16, room_setpoint: 22, kp: 2, supply_min: 12, supply_max: 40 },
     meta: [
@@ -538,6 +615,16 @@ const TYPES = {
   room: {
     label: "Room", kind: "zone",
     glyph: '<path d="M4 20V9l8-5 8 5v11M4 20h16M9 20v-6h6v6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
+    art: () => `<svg class="eq eq-room" viewBox="0 0 180 66" preserveAspectRatio="xMidYMid meet">
+      <path class="room-shell" d="M22 58 V24 L90 8 L158 24 V58 Z"
+            fill="var(--zone-fill, var(--metal-2))" stroke="var(--metal-line)" stroke-width="1.5"/>
+      <line x1="16" y1="58" x2="164" y2="58" stroke="var(--metal-line)" stroke-width="2"/>
+      <g stroke="var(--cold)" stroke-width="1.5"><line x1="50" y1="22" x2="66" y2="22"/><line x1="53" y1="26" x2="63" y2="26"/></g>
+      <rect x="118" y="34" width="22" height="18" fill="var(--panel)" stroke="var(--metal-line)" stroke-width="1.5"/>
+      <line x1="129" y1="34" x2="129" y2="52" stroke="var(--metal-line)"/><line x1="118" y1="43" x2="140" y2="43" stroke="var(--metal-line)"/>
+      <g stroke="var(--warm)" stroke-width="1.5" stroke-linecap="round"><line x1="150" y1="28" x2="140" y2="38"/><line x1="156" y1="35" x2="146" y2="45"/></g>
+      <g stroke="var(--metal-line)" stroke-width="1.3"><rect x="32" y="44" width="18" height="12" fill="var(--metal)"/><line x1="37" y1="44" x2="37" y2="56"/><line x1="41" y1="44" x2="41" y2="56"/><line x1="45" y1="44" x2="45" y2="56"/></g>
+    </svg>`,
     inputs: ["T_out", "Q_hvac", "Q_int", "solar"], outputs: ["T", "Q_env", "Q_solar", "Q_total"],
     state: { T: 21 },
     params: { C: 3.0e5, UA: 30, solar_aperture: 0.5 },
@@ -579,10 +666,10 @@ function defaultGraph() {
       state: t.state ? { ...t.state } : null,
     };
   };
-  g.nodes.push(mk("weather", 40, 64));
-  g.nodes.push(mk("occupancy", 40, 232));
-  g.nodes.push(mk("ahu", 40, 388));
-  g.nodes.push(mk("room", 486, 196));
+  g.nodes.push(mk("weather", 36, 58));
+  g.nodes.push(mk("occupancy", 36, 224));
+  g.nodes.push(mk("ahu", 262, 340));
+  g.nodes.push(mk("room", 560, 150));
   const w = g.nodes[0].id, o = g.nodes[1].id, a = g.nodes[2].id, r = g.nodes[3].id;
   g.conns.push({ from: w, fromPort: "T_out", to: r, toPort: "T_out" });
   g.conns.push({ from: w, fromPort: "irradiance", to: r, toPort: "solar" });
@@ -771,15 +858,17 @@ function createNodeEl(n) {
       <span class="name">${T.label}</span>
       <span class="kind">${T.kind}</span>
     </div>
-    <div class="body"><div class="readout"></div></div>`;
+    <div class="body">${T.art ? `<div class="art">${T.art()}</div>` : ""}<div class="readout"></div></div>`;
   content.appendChild(el);
 
   const portEls = new Map();
   const ins = T.inputs;
   const shownOuts = T.outputs.filter((p) => ["T_out", "irradiance", "Q_int", "T_supply", "Q_hvac", "T"].includes(p));
-  // ensure the box is tall enough for its ports
+  // ensure the box is tall enough for both its ports and its schematic
   const maxPorts = Math.max(ins.length, shownOuts.length);
-  el.style.minHeight = (42 + 14 + maxPorts * 26 + 6) + "px";
+  const portMin = 42 + 14 + maxPorts * 26 + 6;
+  const contentMin = 40 + (T.art ? 84 : 0) + 34 + 8; // header + art + readout + pad
+  el.style.minHeight = Math.max(portMin, contentMin) + "px";
   // input ports on the left, output ports on the right
   ins.forEach((p, i) => portEls.set("in:" + p, addPort(el, n, "in", p, i, ins.length)));
   shownOuts.forEach((p, i) => portEls.set("out:" + p, addPort(el, n, "out", p, i, shownOuts.length)));
@@ -1086,6 +1175,29 @@ function updateStats() {
     <div class="stat"><div class="k">Range</div><div class="v">${fmt(s.tMin, 1)}–${fmt(s.tMax, 1)}<small>°C</small></div></div>`;
 }
 
+/* make each schematic reflect the current simulated state */
+function updateArt(n, el, bus) {
+  if (n.type === "room") {
+    const T = bus[n.id + ".T"];
+    const shell = el.querySelector(".room-shell");
+    if (shell && T != null) el.style.setProperty("--zone-fill", `color-mix(in srgb, ${tempColor(T)} 26%, var(--metal-2))`);
+  } else if (n.type === "ahu") {
+    const q = bus[n.id + ".Q_hvac"] ?? 0;
+    const coil = el.querySelector(".ahu-coil");
+    if (coil) coil.setAttribute("stroke", Math.abs(q) < 5 ? "var(--metal-line)" : (q > 0 ? "var(--warm)" : "var(--cold)"));
+  } else if (n.type === "occupancy") {
+    const nn = Math.round(bus[n.id + ".n"] ?? 0);
+    el.querySelectorAll(".eq-occ .person").forEach((g, i) => {
+      const on = i < Math.min(4, nn);
+      g.querySelectorAll("circle,path").forEach((s) => {
+        s.setAttribute("fill", on ? "var(--warm)" : "var(--metal-2)");
+        s.setAttribute("stroke", on ? "var(--warm)" : "var(--metal-line)");
+      });
+      g.style.opacity = on ? "1" : "0.5";
+    });
+  }
+}
+
 /* live node readouts + clock at the current playhead */
 function refreshReadouts() {
   if (!trace) return;
@@ -1096,6 +1208,7 @@ function refreshReadouts() {
     const box = rec.el.querySelector(".readout");
     box.innerHTML = `<span class="big" style="color:${r.color}">${r.big}</span><span class="unit">${r.unit}</span>${r.sub ? `<span class="sub">${r.sub}</span>` : ""}`;
     if (r.emphasize) box.querySelector(".big").style.fontSize = "30px";
+    updateArt(n, rec.el, bus);
   }
   const t = trace.t[playhead];
   const hh = Math.floor(hourOfDay(t)), mm = Math.floor((hourOfDay(t) - hh) * 60);
@@ -1116,6 +1229,7 @@ function play() {
   if (!trace) return;
   if (playhead >= trace.t.length - 1) playhead = 0;
   playing = true;
+  content.classList.add("playing");
   document.getElementById("playBtn").innerHTML = "❚❚ Pause";
   layoutWires();
   const durationMs = reduceMotion ? 0 : 7000;
@@ -1134,6 +1248,7 @@ function play() {
 }
 function stopPlay() {
   playing = false;
+  content.classList.remove("playing");
   cancelAnimationFrame(rafId);
   document.getElementById("playBtn").innerHTML = "▶ Play";
   layoutWires();
