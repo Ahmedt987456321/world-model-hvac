@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "world-model-hvac"
+version = "0.1.0"
+description = "A learnable world-model builder for physical systems. Domain #1: buildings + HVAC."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+keywords = ["world-model", "simulation", "hvac", "digital-twin", "physics", "control"]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+wm-sim = "wm.cli:main"
+
+[tool.setuptools]
+packages = ["wm"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
