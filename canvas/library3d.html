@@ -134,6 +134,19 @@ function fanWheel(parent, cx, cy, cz, r, mat) {
     const b = add(new BoxGeometry(r * 0.55, r * 0.34, 0.04), mat, w, -r * 0.25, Math.cos(a) * r * 0.78, Math.sin(a) * r * 0.78);
     b.rotation.x = a; b.rotation.z = 0.6;
   }
+  w.userData.spinAxis = "x";
+  return w;
+}
+// an axial fan: a few wide pitched blades on a hub, spins about the vertical y-axis
+function axialFan(parent, cx, cy, cz, r, blades = 6, mat = M.panel) {
+  const w = new Group(); w.position.set(cx, cy, cz); parent.add(w);
+  add(new CylinderGeometry(r * 0.16, r * 0.16, 0.34, 18), M.dark, w);
+  for (let i = 0; i < blades; i++) {
+    const a = (i / blades) * Math.PI * 2;
+    const bl = add(new BoxGeometry(r * 0.92, 0.05, r * 0.36), mat, w, Math.cos(a) * r * 0.52, 0, Math.sin(a) * r * 0.52);
+    bl.rotation.y = -a; bl.rotation.x = 0.38;
+  }
+  w.userData.spinAxis = "y";
   return w;
 }
 
@@ -195,40 +208,50 @@ BUILD.chiller = () => {
 
 BUILD.tower = () => {
   const g = new Group();
-  add(new BoxGeometry(4.6, 0.7, 4.6), M.trim, g, 0, 0.35, 0);                 // basin
-  add(new BoxGeometry(4.2, 3.4, 4.2), M.green, g, 0, 2.5, 0);                 // body
-  // louvers on all 4 sides
-  for (let i = 0; i < 5; i++) {
+  // stand + deck
+  for (const sx of [-2, 2]) for (const sz of [-2, 2]) add(new BoxGeometry(0.18, 1.0, 0.18), M.trim, g, sx, 0.5, sz);
+  add(new BoxGeometry(4.7, 0.18, 4.7), M.trim, g, 0, 1.0, 0);
+  // cold-water basin
+  add(new BoxGeometry(4.8, 0.7, 4.8), M.dark, g, 0, 1.45, 0);
+  // casing body (galvanized)
+  add(new BoxGeometry(4.2, 3.3, 4.2), M.panel, g, 0, 3.55, 0);
+  // intake louvers on the lower half of every side
+  for (let i = 0; i < 6; i++) {
+    const y = 2.15 + i * 0.3;
     for (const s of [1, -1]) {
-      add(new BoxGeometry(4.0, 0.14, 0.1), M.dark, g, 0, 1.4 + i * 0.42, s * 2.11).rotation.x = 0.5;
-      add(new BoxGeometry(0.1, 0.14, 4.0), M.dark, g, s * 2.11, 1.4 + i * 0.42, 0).rotation.z = 0.5;
+      add(new BoxGeometry(4.0, 0.16, 0.12), M.dark, g, 0, y, s * 2.12).rotation.x = s * 0.5;
+      add(new BoxGeometry(0.12, 0.16, 4.0), M.dark, g, s * 2.12, y, 0).rotation.z = -s * 0.5;
     }
   }
-  // fan shroud (cylinder) + wheel on top
-  add(new CylinderGeometry(1.7, 1.7, 0.7, 32, 1, true), M.dark, g, 0, 4.5, 0);
-  const spin = fanWheel(g, 0, 4.7, 0, 1.5, M.panel);
-  spin.rotation.z = Math.PI / 2; // lay flat (axis vertical)
-  // legs
-  for (const sx of [-1.9, 1.9]) for (const sz of [-1.9, 1.9]) add(new BoxGeometry(0.16, 0.7, 0.16), M.trim, g, sx, 0.35, sz);
-  return { group: g, spin: [spin] };
+  // enclosed fan deck + flared fan cylinder (eased inlet) + induced-draft axial fan
+  add(new BoxGeometry(4.3, 0.2, 4.3), M.panel, g, 0, 5.3, 0);
+  add(new CylinderGeometry(1.6, 1.95, 1.15, 36, 1, true), M.panel, g, 0, 6.0, 0);
+  const fan = axialFan(g, 0, 5.9, 0, 1.6, 6, M.dark);
+  return { group: g, spin: [fan] };
 };
 
 BUILD.pump = () => {
-  const g = new Group();
-  add(new BoxGeometry(3.4, 0.35, 1.5), M.yellow, g, 0, 0.18, 0);             // baseplate
-  // motor
-  add(new CylinderGeometry(0.6, 0.6, 2.0, 28), M.blue, g, 0.9, 1.1, 0).rotation.z = Math.PI / 2;
-  add(new BoxGeometry(0.6, 0.5, 0.9), M.blue, g, 0.9, 0.55, 0);              // motor foot
-  for (let i = 0; i < 14; i++) add(new BoxGeometry(0.04, 0.5, 0.04), M.dark, g, -0.05 + i * 0.14, 1.1, 0.62); // fins
+  const g = new Group(); const Y = 1.05;
+  add(new BoxGeometry(3.8, 0.35, 1.4), M.yellow, g, 0, 0.18, 0);             // common baseplate
+  // motor (right) with cooling fins + rear cowl + terminal box
+  add(new CylinderGeometry(0.62, 0.62, 2.0, 28), M.blue, g, 1.05, Y, 0).rotation.z = Math.PI / 2;
+  add(new BoxGeometry(2.0, 0.35, 1.0), M.blue, g, 1.05, 0.5, 0);
+  for (let i = 0; i < 12; i++) add(new BoxGeometry(0.04, 0.5, 0.04), M.dark, g, 0.2 + i * 0.14, Y, 0.63);
+  add(new BoxGeometry(0.45, 0.5, 0.55), M.dark, g, 1.05, Y + 0.62, 0);        // terminal box
+  add(new CylinderGeometry(0.5, 0.5, 0.16, 24), M.dark, g, 2.1, Y, 0).rotation.z = Math.PI / 2; // rear cowl
+  // coupling guard between motor and pump
+  add(new BoxGeometry(0.55, 0.7, 0.72), M.trim, g, -0.1, Y, 0);
   // volute casing (snail)
-  add(new CylinderGeometry(0.85, 0.85, 0.7, 32), M.dark, g, -1.1, 1.05, 0).rotation.z = Math.PI / 2;
-  add(new TorusGeometry(0.6, 0.28, 16, 32), M.dark, g, -1.1, 1.05, 0).rotation.y = Math.PI / 2;
-  // suction (front) + discharge (top) flanges
-  add(new CylinderGeometry(0.4, 0.4, 0.5, 20), M.dark, g, -1.8, 1.05, 0).rotation.z = Math.PI / 2;
-  add(new CylinderGeometry(0.34, 0.34, 0.8, 20), M.dark, g, -1.1, 1.9, 0);
-  add(new CylinderGeometry(0.42, 0.42, 0.1, 20), M.bright, g, -1.1, 2.3, 0);
-  const spin = new Group(); spin.position.set(-1.3, 1.05, 0); g.add(spin);
-  for (let i = 0; i < 6; i++) add(new BoxGeometry(0.06, 0.44, 0.3), M.bright, spin, 0, Math.cos(i / 6 * Math.PI * 2) * 0.28, Math.sin(i / 6 * Math.PI * 2) * 0.28).rotation.x = i / 6 * Math.PI * 2;
+  add(new CylinderGeometry(0.9, 0.9, 0.62, 32), M.dark, g, -1.2, Y, 0).rotation.z = Math.PI / 2;
+  add(new TorusGeometry(0.64, 0.3, 16, 32), M.dark, g, -1.2, Y, 0).rotation.y = Math.PI / 2;
+  // suction flange on the END (axial, front) — larger bore
+  add(new CylinderGeometry(0.44, 0.44, 0.5, 22), M.dark, g, -1.95, Y, 0).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(0.52, 0.52, 0.1, 22), M.bright, g, -2.2, Y, 0).rotation.z = Math.PI / 2;
+  // discharge flange on TOP (vertical) — smaller bore
+  add(new CylinderGeometry(0.34, 0.34, 0.95, 22), M.dark, g, -1.2, Y + 0.9, 0);
+  add(new CylinderGeometry(0.42, 0.42, 0.1, 22), M.bright, g, -1.2, Y + 1.4, 0);
+  const spin = new Group(); spin.position.set(-1.2, Y, 0); spin.userData.spinAxis = "x"; g.add(spin);
+  add(new CylinderGeometry(0.12, 0.12, 0.7, 12), M.bright, spin).rotation.z = Math.PI / 2;
   return { group: g, spin: [spin] };
 };
 
@@ -261,6 +284,78 @@ BUILD.fan = () => {
   return { group: g, spin: [spin] };
 };
 
+BUILD.boiler = () => {
+  const g = new Group(); const Y = 1.8;
+  add(new BoxGeometry(5.4, 0.4, 2.2), M.trim, g, 0, 0.2, 0);                         // skid base
+  add(new CylinderGeometry(1.3, 1.3, 4.2, 32), M.panel, g, 0, Y, 0).rotation.z = Math.PI / 2; // shell jacket
+  add(new CylinderGeometry(1.34, 1.34, 0.25, 32), M.dark, g, -2.15, Y, 0).rotation.z = Math.PI / 2; // front flue door
+  add(new CylinderGeometry(1.34, 1.34, 0.25, 32), M.dark, g, 2.15, Y, 0).rotation.z = Math.PI / 2;  // rear flue door
+  add(new BoxGeometry(0.1, 0.5, 0.5), M.bright, g, -2.35, Y, 0);                      // door latch
+  // burner + blower on the front
+  add(new CylinderGeometry(0.5, 0.5, 1.0, 24), M.blue, g, -2.95, Y - 0.2, 0).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(0.72, 0.72, 0.7, 24), M.blue, g, -3.45, Y - 0.2, 0).rotation.z = Math.PI / 2;
+  add(new BoxGeometry(0.4, 0.9, 0.55), M.trim, g, -3.2, Y + 0.7, 0);                  // burner control
+  // vertical flue stack on top
+  add(new CylinderGeometry(0.5, 0.5, 2.4, 24), M.dark, g, 1.5, Y + 2.2, 0);
+  add(new CylinderGeometry(0.58, 0.58, 0.2, 24), M.dark, g, 1.5, Y + 3.4, 0);
+  // supply/return water nozzles on top
+  for (const x of [-0.6, 0.6]) add(new CylinderGeometry(0.24, 0.24, 0.7, 16), M.dark, g, x, Y + 1.5, 0);
+  // control panel on the side
+  add(new BoxGeometry(0.9, 1.1, 0.25), M.trim, g, -0.2, Y + 0.2, 1.35);
+  add(new BoxGeometry(0.5, 0.5, 0.05), M.blue, g, -0.2, Y + 0.35, 1.5);
+  return { group: g, spin: [] };
+};
+
+BUILD.heatpump = () => {
+  const g = new Group(); const Y = 1.7;
+  add(new BoxGeometry(3.4, 3.0, 1.9), M.panel, g, 0, Y, 0);                           // powder-coated cabinet
+  add(new BoxGeometry(3.46, 0.12, 1.96), M.trim, g, 0, Y + 1.5, 0);                   // top cap
+  for (const sz of [-0.98, 0.98]) add(new BoxGeometry(3.0, 0.2, 0.12), M.trim, g, 0, 0.3, sz); // base rails
+  // condenser coil fins across both side faces (depth-wise)
+  for (const sx of [-1.71, 1.71]) for (let i = 0; i < 13; i++)
+    add(new BoxGeometry(0.02, 2.5, 0.05), M.dark, g, sx, Y, -0.82 + i * 0.137);
+  // right half = access panel (compressor) with seam + handle
+  add(new BoxGeometry(0.03, 2.7, 0.02), M.trim, g, 0.35, Y, 0.96);
+  add(new BoxGeometry(0.18, 0.4, 0.06), M.bright, g, 0.8, Y - 0.2, 0.98);
+  // left half = front fan behind a circular grille (facing +z)
+  add(new TorusGeometry(1.05, 0.08, 12, 44), M.trim, g, -0.55, Y + 0.35, 0.95);       // grille rim
+  for (let r = 0.3; r < 1.0; r += 0.26) add(new TorusGeometry(r, 0.018, 8, 36), M.dark, g, -0.55, Y + 0.35, 0.94);
+  const fan = new Group(); fan.position.set(-0.55, Y + 0.35, 0.9); fan.userData.spinAxis = "z"; g.add(fan);
+  add(new CylinderGeometry(0.16, 0.16, 0.24, 16), M.dark, fan).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2;
+    add(new BoxGeometry(0.32, 0.86, 0.04), M.dark, fan, Math.cos(a) * 0.48, Math.sin(a) * 0.48, 0).rotation.z = a + 0.4; }
+  return { group: g, spin: [fan] };
+};
+
+BUILD.plateHX = () => {
+  const g = new Group(); const Y = 1.45;
+  add(new BoxGeometry(1.7, 0.22, 2.2), M.trim, g, 0, 0.11, 0);                        // feet
+  add(new BoxGeometry(0.36, 2.4, 1.9), M.blue, g, -1.0, Y, 0);                        // fixed head
+  for (let i = 0; i < 28; i++) add(new BoxGeometry(0.05, 2.2, 1.8), i % 2 ? M.bright : M.dark, g, -0.78 + i * 0.053, Y, 0); // plate pack
+  add(new BoxGeometry(0.36, 2.4, 1.9), M.blue, g, 0.85, Y, 0);                        // pressure plate
+  for (const sy of [0.95, -0.95]) for (const sz of [0.72, -0.72]) add(new CylinderGeometry(0.06, 0.06, 2.5, 12), M.dark, g, 0, Y + sy, sz).rotation.z = Math.PI / 2; // tie bolts
+  add(new BoxGeometry(2.7, 0.12, 0.12), M.dark, g, 0, Y + 1.3, 0);                    // carrying bar
+  for (const sy of [0.75, -0.75]) for (const sz of [0.55, -0.55]) {                   // 4 nozzles on the head
+    add(new CylinderGeometry(0.22, 0.22, 0.5, 16), M.dark, g, -1.35, Y + sy, sz).rotation.z = Math.PI / 2;
+    add(new CylinderGeometry(0.28, 0.28, 0.08, 16), M.bright, g, -1.6, Y + sy, sz).rotation.z = Math.PI / 2;
+  }
+  return { group: g, spin: [] };
+};
+
+BUILD.tes = () => {
+  const g = new Group();
+  add(new CylinderGeometry(2.0, 2.0, 7.0, 44), M.panel, g, 0, 3.7, 0);               // insulated shell
+  for (let i = 0; i < 6; i++) add(new TorusGeometry(2.01, 0.03, 8, 44), M.dark, g, 0, 1.1 + i * 1.05, 0).rotation.x = Math.PI / 2; // cladding bands
+  add(new SphereGeometry(2.0, 44, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.panel, g, 0, 7.2, 0); // domed top
+  add(new CylinderGeometry(0.5, 0.5, 0.3, 20), M.trim, g, 0, 8.35, 0);               // manway
+  add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.dark, g, 0.9, 7.9, 0);              // top nozzle
+  add(new CylinderGeometry(0.36, 0.36, 0.7, 16), M.dark, g, 1.9, 0.6, 0).rotation.z = Math.PI / 2; // bottom nozzle
+  // side ladder
+  for (const sz of [0.2, -0.2]) add(new CylinderGeometry(0.04, 0.04, 6.6, 8), M.dark, g, 2.06, 3.7, sz);
+  for (let i = 0; i < 11; i++) add(new BoxGeometry(0.05, 0.05, 0.5), M.dark, g, 2.06, 0.9 + i * 0.55, 0);
+  return { group: g, spin: [] };
+};
+
 /* ---------- catalog ---------- */
 const CATALOG = [
   { cat: "Air side" },
@@ -269,12 +364,17 @@ const CATALOG = [
   { key: "vav", name: "VAV Terminal Box", desc: "Variable-air-volume box: a damper modulates flow, a reheat coil trims supply temperature per zone." },
   { cat: "Cooling plant" },
   { key: "chiller", name: "Water-Cooled Chiller", desc: "Evaporator & condenser shells, a compressor and refrigerant circuit — the heart of the district cooling plant." },
-  { key: "tower", name: "Cooling Tower", desc: "Induced-draft tower: an axial fan pulls air across louvers to reject condenser heat to atmosphere." },
-  { key: "pump", name: "Centrifugal Pump", desc: "Volute casing and impeller driven by a motor on a baseplate — circulates chilled and condenser water." },
+  { key: "tower", name: "Cooling Tower", desc: "Induced-draft tower: an axial fan on the deck pulls air up through low intake louvers to reject condenser heat." },
+  { key: "pump", name: "Centrifugal Pump", desc: "End-suction volute pump: axial suction, top discharge, coupled to a motor on a common baseplate." },
+  { key: "tes", name: "Thermal Storage Tank", desc: "Tall insulated stratified chilled-water tank — stores cold overnight to shave the district plant's daytime peak." },
+  { cat: "Heat side" },
+  { key: "boiler", name: "Fire-Tube Boiler", desc: "Horizontal cylindrical shell with fire tubes, a front burner and blower, and a flue stack on top." },
+  { key: "heatpump", name: "Air-Source Heat Pump", desc: "Powder-coated cabinet with a condenser coil, a front fan behind a grille, and a compressor inside." },
+  { key: "plateHX", name: "Plate Heat Exchanger", desc: "A gasketed plate pack compressed between a fixed head and pressure plate by tie-bolts, with four nozzles." },
 ];
 
 /* soon-to-come, shown greyed */
-const SOON = ["Boiler", "Heat Pump", "Plate Heat Exchanger", "Thermal Storage Tank", "Damper", "Duct & Fittings", "Sensor", "Valve"];
+const SOON = ["Rooftop Unit", "Fan Coil Unit", "Damper", "Control Valve", "Duct & Fittings", "Sensor / DDC"];
 
 /* ---------- build the list ---------- */
 const listEl = document.getElementById("list");
@@ -342,7 +442,7 @@ addEventListener("resize", resize);
 buildList(); select("ahu"); resize();
 function tick() {
   requestAnimationFrame(tick);
-  if (spinOn) for (const s of spinners) s.rotation.x += 0.3;
+  if (spinOn) for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += 0.3;
   if (auto) { az += 0.0035; updateCam(); }
   renderer.render(scene, camera);
 }
