@@ -14,43 +14,58 @@
     position: fixed; left: 16px; top: 16px; z-index: 10;
     background: rgba(18,24,32,0.72); color: #e7eef5; backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 14px;
-    max-width: 268px;
+    max-width: 280px;
   }
   .panel h1 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
   .panel p { margin: 0 0 10px; font-size: 12px; color: #9fb0c0; line-height: 1.5; }
-  .row { display: flex; gap: 6px; }
-  .row button {
-    flex: 1; font: inherit; font-size: 12px; color: #e7eef5; cursor: pointer;
+  .row { display: flex; gap: 6px; margin-bottom: 8px; }
+  .row button, .loadbtn {
+    flex: 1; font: inherit; font-size: 12px; color: #e7eef5; cursor: pointer; text-align: center;
     background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.14);
     border-radius: 8px; padding: 6px 8px;
   }
   .row button.on { background: rgba(79,214,227,0.18); border-color: #3fd0dd; color: #7fe6f0; }
+  .loadbtn { display: block; background: rgba(79,214,227,0.14); border-color: #3fd0dd; color: #9ff0f8; }
+  .status { font-size: 11px; color: #7f8ea0; margin-top: 8px; font-family: "IBM Plex Mono", monospace; }
   .hint { position: fixed; left: 16px; bottom: 14px; z-index: 10; font-size: 11px;
     color: #8496a6; font-family: "IBM Plex Mono", ui-monospace, monospace; }
   .tag { position: fixed; right: 16px; bottom: 14px; z-index: 10; font-size: 11px;
     color: #6a7d8f; font-family: "IBM Plex Mono", ui-monospace, monospace; }
 </style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.js",
+    "three/addons/": "./vendor/jsm/"
+  }
+}
+</script>
 </head>
 <body>
 <div id="stage"></div>
 <div class="panel">
   <h1>Air handler — 3D</h1>
-  <p>Real-time 3D: insulated cabinet, intake louvers, access doors, a centrifugal blower wheel, and galvanized ducts. Drag to orbit, scroll to zoom.</p>
+  <p>Real-time 3D with PBR + environment lighting. Drag to orbit, scroll to zoom. Drop in a real <code>.glb</code> to replace the model.</p>
   <div class="row">
     <button id="btnHeat" class="on">Heating</button>
     <button id="btnCool">Cooling</button>
     <button id="btnFan" class="on">Fan: on</button>
   </div>
+  <label class="loadbtn">Load a .glb model<input id="file" type="file" accept=".glb,.gltf" hidden /></label>
+  <div class="status" id="status">model: procedural (built-in)</div>
 </div>
-<div class="hint">drag to orbit · scroll to zoom</div>
+<div class="hint">drag to orbit · scroll to zoom · drop a .glb file anywhere</div>
 <div class="tag">world-model-hvac · 3D</div>
 
-<script src="./three.min.js"></script>
-<script>
-"use strict";
-const { Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3,
+<script type="module">
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
+
+const { Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3,
   BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry,
-  MeshStandardMaterial, MeshBasicMaterial, ShadowMaterial,
+  MeshStandardMaterial, ShadowMaterial,
   DirectionalLight, HemisphereLight, AmbientLight,
   PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace,
   MathUtils } = THREE;
@@ -62,56 +77,39 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFSoftShadowMap;
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.25;
+renderer.toneMappingExposure = 1.1;
 renderer.outputColorSpace = SRGBColorSpace;
 stage.appendChild(renderer.domElement);
 
 const scene = new Scene();
 scene.background = new Color(0x12181f);
-
 const camera = new PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
 
-/* studio environment for metal reflections */
-function studioEnv() {
-  const pmrem = new PMREMGenerator(renderer);
-  const env = new Scene();
-  env.background = new Color(0x3a424c);
-  const light = (hex, x, y, z, sx, sy, sz) => {
-    const m = new Mesh(new BoxGeometry(sx, sy, sz), new MeshBasicMaterial({ color: hex }));
-    m.position.set(x, y, z); env.add(m);
-  };
-  light(0xffffff, 0, 12, 0, 16, 0.2, 16);
-  light(0xc6d8ff, -10, 4, 5, 0.2, 10, 13);
-  light(0xffe6c4, 9, 3, -6, 0.2, 9, 13);
-  light(0xaab6c4, 0, 2, 13, 18, 9, 0.2);
-  const tex = pmrem.fromScene(env, 0.03).texture;
-  pmrem.dispose();
-  return tex;
-}
-scene.environment = studioEnv();
+/* realistic image-based lighting from Three.js's built-in RoomEnvironment
+   (a procedural studio — no HDR file to download) */
+const pmrem = new PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 
-scene.add(new HemisphereLight(0xe6eef7, 0x2c333b, 0.7));
-scene.add(new AmbientLight(0xffffff, 0.18));
-const key = new DirectionalLight(0xffffff, 2.6);
-key.position.set(7, 13, 8);
-key.castShadow = true;
+scene.add(new HemisphereLight(0xe6eef7, 0x2c333b, 0.35));
+scene.add(new AmbientLight(0xffffff, 0.1));
+const key = new DirectionalLight(0xffffff, 2.2);
+key.position.set(7, 13, 8); key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.near = 1; key.shadow.camera.far = 60;
 key.shadow.camera.left = -14; key.shadow.camera.right = 14;
 key.shadow.camera.top = 14; key.shadow.camera.bottom = -14;
 key.shadow.bias = -0.0003;
 scene.add(key);
-const rim = new DirectionalLight(0xbcd2ff, 0.7);
-rim.position.set(-9, 6, -8);
-scene.add(rim);
+const rim = new DirectionalLight(0xbcd2ff, 0.5);
+rim.position.set(-9, 6, -8); scene.add(rim);
 
-/* materials — light galvanized/painted panels, brighter than a mirror */
-const panel = new MeshStandardMaterial({ color: 0xcfd6dc, metalness: 0.55, roughness: 0.48 });
-const panelDark = new MeshStandardMaterial({ color: 0x9099a2, metalness: 0.55, roughness: 0.52 });
-const galv = new MeshStandardMaterial({ color: 0xc9d0d6, metalness: 0.82, roughness: 0.38 });
-const trim = new MeshStandardMaterial({ color: 0x3a424b, metalness: 0.5, roughness: 0.55 });
-const bright = new MeshStandardMaterial({ color: 0xe7ebf0, metalness: 0.7, roughness: 0.3 });
-const coilMat = new MeshStandardMaterial({ color: 0x9aa3ac, metalness: 0.6, roughness: 0.4,
+/* materials — PBR, tuned for the environment map */
+const panel = new MeshStandardMaterial({ color: 0xd0d7dd, metalness: 0.7, roughness: 0.4, envMapIntensity: 1.1 });
+const panelDark = new MeshStandardMaterial({ color: 0x8d97a1, metalness: 0.7, roughness: 0.45, envMapIntensity: 1.0 });
+const galv = new MeshStandardMaterial({ color: 0xc9d0d6, metalness: 0.9, roughness: 0.3, envMapIntensity: 1.2 });
+const trim = new MeshStandardMaterial({ color: 0x38404a, metalness: 0.6, roughness: 0.5 });
+const bright = new MeshStandardMaterial({ color: 0xe7ebf0, metalness: 0.85, roughness: 0.25, envMapIntensity: 1.2 });
+const coilMat = new MeshStandardMaterial({ color: 0x9aa3ac, metalness: 0.5, roughness: 0.45,
   emissive: new Color(0xe0662a), emissiveIntensity: 0.6 });
 
 const add = (geo, mat, parent, x = 0, y = 0, z = 0) => {
@@ -119,90 +117,106 @@ const add = (geo, mat, parent, x = 0, y = 0, z = 0) => {
   m.castShadow = true; m.receiveShadow = true; (parent || scene).add(m); return m;
 };
 
+/* ---------- procedural AHU (default / fallback) ---------- */
 const ahu = new Group(); scene.add(ahu);
 const BODY_Y = 3.4;
-
-/* ---- cabinet ---- */
 add(new BoxGeometry(4.8, 2.0, 2.0), panel, ahu, 0, BODY_Y, 0);
-// corner posts (double-wall frame look)
-for (const sx of [-2.4, 2.4]) for (const sz of [-1.0, 1.0])
-  add(new BoxGeometry(0.1, 2.02, 0.1), trim, ahu, sx, BODY_Y, sz);
-for (const sy of [-1.0, 1.0]) for (const sz of [-1.0, 1.0])
-  add(new BoxGeometry(4.82, 0.1, 0.1), trim, ahu, 0, BODY_Y + sy, sz);
-// base channel + housekeeping pad legs
+for (const sx of [-2.4, 2.4]) for (const sz of [-1.0, 1.0]) add(new BoxGeometry(0.1, 2.02, 0.1), trim, ahu, sx, BODY_Y, sz);
+for (const sy of [-1.0, 1.0]) for (const sz of [-1.0, 1.0]) add(new BoxGeometry(4.82, 0.1, 0.1), trim, ahu, 0, BODY_Y + sy, sz);
 for (const sz of [-0.82, 0.82]) add(new BoxGeometry(4.9, 0.16, 0.18), trim, ahu, 0, BODY_Y - 1.05, sz);
-// lifting lugs
 for (const sx of [-1.9, 1.9]) add(new BoxGeometry(0.12, 0.12, 0.5), panelDark, ahu, sx, BODY_Y + 1.06, 0);
-
-/* ---- intake louver bank on the -x end ---- */
-for (let i = -3; i <= 3; i++) {
-  const l = add(new BoxGeometry(0.06, 0.16, 1.5), panelDark, ahu, -2.41, BODY_Y + i * 0.24, 0);
-  l.rotation.z = 0.55;
-}
+for (let i = -3; i <= 3; i++) add(new BoxGeometry(0.06, 0.16, 1.5), panelDark, ahu, -2.41, BODY_Y + i * 0.24, 0).rotation.z = 0.55;
 add(new BoxGeometry(0.05, 1.9, 1.7), trim, ahu, -2.42, BODY_Y, 0);
-
-/* ---- front access doors (facing +z) ---- */
 function door(cx, w, withView) {
-  add(new BoxGeometry(w + 0.06, 1.82, 0.03), trim, ahu, cx, BODY_Y, 0.99);   // frame
-  add(new BoxGeometry(w, 1.72, 0.05), panel, ahu, cx, BODY_Y, 1.01);          // leaf
-  add(new BoxGeometry(0.06, 0.44, 0.1), bright, ahu, cx + w / 2 - 0.14, BODY_Y - 0.1, 1.05); // handle
-  for (const hy of [0.72, -0.72]) add(new BoxGeometry(0.05, 0.16, 0.08), trim, ahu, cx - w / 2 + 0.02, BODY_Y + hy, 1.04); // hinges
-  if (withView) {
-    add(new BoxGeometry(0.5, 0.5, 0.02), coilMat, ahu, cx, BODY_Y + 0.35, 1.04);   // sight glass -> coil
-    add(new BoxGeometry(0.58, 0.58, 0.03), trim, ahu, cx, BODY_Y + 0.35, 1.03);
-  }
+  add(new BoxGeometry(w + 0.06, 1.82, 0.03), trim, ahu, cx, BODY_Y, 0.99);
+  add(new BoxGeometry(w, 1.72, 0.05), panel, ahu, cx, BODY_Y, 1.01);
+  add(new BoxGeometry(0.06, 0.44, 0.1), bright, ahu, cx + w / 2 - 0.14, BODY_Y - 0.1, 1.05);
+  for (const hy of [0.72, -0.72]) add(new BoxGeometry(0.05, 0.16, 0.08), trim, ahu, cx - w / 2 + 0.02, BODY_Y + hy, 1.04);
+  if (withView) { add(new BoxGeometry(0.5, 0.5, 0.02), coilMat, ahu, cx, BODY_Y + 0.35, 1.04);
+    add(new BoxGeometry(0.58, 0.58, 0.03), trim, ahu, cx, BODY_Y + 0.35, 1.03); }
 }
-door(-1.35, 1.15, true);
-door(0.15, 1.35, false);
-// small control box
+door(-1.35, 1.15, true); door(0.15, 1.35, false);
 add(new BoxGeometry(0.42, 0.6, 0.12), trim, ahu, 1.75, BODY_Y + 0.1, 1.02);
-add(new BoxGeometry(0.24, 0.12, 0.02), bright, ahu, 1.75, BODY_Y + 0.28, 1.09);
-
-/* ---- centrifugal blower on the +x end ---- */
 const blower = new Group(); blower.position.set(2.42, BODY_Y, 0); ahu.add(blower);
-// round housing opening
 add(new TorusGeometry(0.74, 0.13, 16, 46), panelDark, blower).rotation.y = Math.PI / 2;
 add(new CylinderGeometry(0.74, 0.74, 0.12, 46, 1, true), panelDark, blower).rotation.z = Math.PI / 2;
-// inner recess
 add(new CylinderGeometry(0.66, 0.66, 0.5, 40, 1, true), trim, blower, -0.28, 0, 0).rotation.z = Math.PI / 2;
-// the wheel: two rings + backward-curved blades + hub
 const wheel = new Group(); wheel.position.x = -0.05; blower.add(wheel);
 add(new TorusGeometry(0.58, 0.05, 12, 40), bright, wheel).rotation.y = Math.PI / 2;
-const back = add(new TorusGeometry(0.58, 0.05, 12, 40), bright, wheel, -0.3, 0, 0); back.rotation.y = Math.PI / 2;
+add(new TorusGeometry(0.58, 0.05, 12, 40), bright, wheel, -0.3, 0, 0).rotation.y = Math.PI / 2;
 add(new CylinderGeometry(0.14, 0.14, 0.42, 22), panelDark, wheel).rotation.z = Math.PI / 2;
-for (let i = 0; i < 20; i++) {
-  const a = (i / 20) * Math.PI * 2;
+for (let i = 0; i < 20; i++) { const a = (i / 20) * Math.PI * 2;
   const b = add(new BoxGeometry(0.34, 0.22, 0.025), bright, wheel, -0.15, Math.cos(a) * 0.46, Math.sin(a) * 0.46);
-  b.rotation.x = a; b.rotation.z = 0.6; // backward-curved tilt
-}
-// motor below the blower with a belt guard
-const motor = add(new CylinderGeometry(0.24, 0.24, 0.8, 24), trim, ahu, 2.0, BODY_Y - 0.86, 0.0); motor.rotation.z = Math.PI / 2;
-add(new CylinderGeometry(0.1, 0.1, 0.3, 16), panelDark, ahu, 2.34, BODY_Y - 0.86, 0.0).rotation.z = Math.PI / 2;
-add(new BoxGeometry(0.14, 0.7, 0.5), panelDark, ahu, 2.34, BODY_Y - 0.5, 0.0); // belt guard
-
-/* ---- galvanized supply ducts dropping to the floor ---- */
+  b.rotation.x = a; b.rotation.z = 0.6; }
+add(new CylinderGeometry(0.24, 0.24, 0.8, 24), trim, ahu, 2.0, BODY_Y - 0.86, 0).rotation.z = Math.PI / 2;
+add(new BoxGeometry(0.14, 0.7, 0.5), panelDark, ahu, 2.34, BODY_Y - 0.5, 0);
 function ductManifold(cx) {
-  const g = new Group(); ahu.add(g);
-  const headerY = BODY_Y - 1.18;
-  const header = add(new CylinderGeometry(0.28, 0.28, 2.0, 28), galv, g, cx, headerY, 0); header.rotation.x = Math.PI / 2;
-  add(new CylinderGeometry(0.26, 0.26, 0.32, 24), galv, g, cx, headerY + 0.34, 0);
-  for (const dz of [-0.7, 0, 0.7]) {
-    const len = headerY - 0.55;
-    add(new CylinderGeometry(0.22, 0.22, len, 24), galv, g, cx, headerY - len / 2, dz);
+  const g = new Group(); ahu.add(g); const hy = BODY_Y - 1.18;
+  add(new CylinderGeometry(0.28, 0.28, 2.0, 28), galv, g, cx, hy, 0).rotation.x = Math.PI / 2;
+  add(new CylinderGeometry(0.26, 0.26, 0.32, 24), galv, g, cx, hy + 0.34, 0);
+  for (const dz of [-0.7, 0, 0.7]) { const len = hy - 0.55;
+    add(new CylinderGeometry(0.22, 0.22, len, 24), galv, g, cx, hy - len / 2, dz);
     add(new TorusGeometry(0.22, 0.22, 12, 20, Math.PI / 2), galv, g, cx, 0.6, dz);
     add(new CylinderGeometry(0.34, 0.22, 0.3, 24), galv, g, cx, 0.2, dz);
-    add(new CylinderGeometry(0.37, 0.37, 0.05, 24), panelDark, g, cx, 0.05, dz);
-  }
+    add(new CylinderGeometry(0.37, 0.37, 0.05, 24), panelDark, g, cx, 0.05, dz); }
 }
 ductManifold(-1.4); ductManifold(1.4);
 
-/* ---- floor ---- */
+/* floor */
 const shadow = new Mesh(new PlaneGeometry(80, 80), new ShadowMaterial({ opacity: 0.3 }));
 shadow.rotation.x = -Math.PI / 2; shadow.receiveShadow = true; scene.add(shadow);
 const floor = new Mesh(new PlaneGeometry(80, 80), new MeshStandardMaterial({ color: 0x1a212a, metalness: 0.1, roughness: 0.9 }));
 floor.rotation.x = -Math.PI / 2; floor.position.y = -0.002; floor.receiveShadow = true; scene.add(floor);
 
-/* ---- orbit ---- */
+/* ---------- GLTF loader slot: drop in a real model ---------- */
+const status = document.getElementById("status");
+const loader = new GLTFLoader();
+const draco = new DRACOLoader().setDecoderPath("./vendor/jsm/libs/draco/gltf/");
+loader.setDRACOLoader(draco); // so Draco-compressed models load too
+let loaded = null;
+
+function frameObject(root) {
+  root.updateMatrixWorld(true);
+  let box = new Box3().setFromObject(root);
+  let size = box.getSize(new Vector3());
+  const scl = 5 / Math.max(size.x, size.y, size.z || 1);
+  root.scale.setScalar(scl);
+  root.updateMatrixWorld(true);
+  box = new Box3().setFromObject(root);
+  const c = box.getCenter(new Vector3());
+  root.position.x -= c.x; root.position.z -= c.z; root.position.y -= box.min.y;
+  root.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  const h = new Box3().setFromObject(root).getSize(new Vector3()).y;
+  target.set(0, h * 0.5, 0); rad = h * 2.4; updateCam();
+}
+function useGltf(gltf, label) {
+  if (loaded) scene.remove(loaded);
+  ahu.visible = false;
+  loaded = gltf.scene; frameObject(loaded); scene.add(loaded);
+  status.textContent = "model: " + label;
+}
+// auto-load a committed model if one exists at canvas/models/ahu.glb
+loader.load("./models/ahu.glb",
+  (g) => useGltf(g, "ahu.glb (repo)"),
+  undefined,
+  () => { /* none present — keep procedural */ });
+
+// file picker + drag-drop for a local .glb
+function loadFile(file) {
+  const url = URL.createObjectURL(file);
+  status.textContent = "loading " + file.name + "…";
+  loader.load(url, (g) => { useGltf(g, file.name); URL.revokeObjectURL(url); },
+    undefined, (e) => { status.textContent = "could not load: " + (e.message || file.name); });
+}
+document.getElementById("file").addEventListener("change", (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => {
+  e.preventDefault();
+  const f = [...e.dataTransfer.files].find((x) => /\.(glb|gltf)$/i.test(x.name));
+  if (f) loadFile(f);
+});
+
+/* ---------- orbit ---------- */
 let az = 0.9, pol = 1.12, rad = 13;
 const target = new Vector3(0, 2.7, 0);
 function updateCam() {
@@ -218,15 +232,14 @@ addEventListener("pointerup", () => (dragging = false));
 addEventListener("pointermove", (e) => {
   if (!dragging) return;
   az -= (e.clientX - px) * 0.006; px = e.clientX;
-  pol = MathUtils.clamp(pol - (e.clientY - py) * 0.006, 0.25, 1.45); py = e.clientY;
+  pol = MathUtils.clamp(pol - (e.clientY - py) * 0.006, 0.2, 1.5); py = e.clientY;
   updateCam();
 });
 renderer.domElement.addEventListener("wheel", (e) => {
-  e.preventDefault();
-  rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 6, 26); updateCam();
+  e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 3, 40); updateCam();
 }, { passive: false });
 
-/* ---- controls ---- */
+/* ---------- controls ---------- */
 let fanOn = true;
 const bHeat = document.getElementById("btnHeat"), bCool = document.getElementById("btnCool"), bFan = document.getElementById("btnFan");
 bHeat.onclick = () => { coilMat.emissive.set(0xe0662a); bHeat.classList.add("on"); bCool.classList.remove("on"); };
@@ -241,7 +254,7 @@ addEventListener("resize", () => {
 updateCam();
 function tick() {
   requestAnimationFrame(tick);
-  if (fanOn) wheel.rotation.x += 0.32;
+  if (fanOn && ahu.visible) wheel.rotation.x += 0.32;
   az += 0.0006; updateCam();
   renderer.render(scene, camera);
 }
