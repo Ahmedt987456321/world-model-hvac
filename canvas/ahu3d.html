@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>AHU · 3D proof</title>
+<title>AHU · 3D</title>
 <style>
   :root { color-scheme: light dark; }
-  html, body { margin: 0; height: 100%; background: #11161c; overflow: hidden;
+  html, body { margin: 0; height: 100%; background: #12181f; overflow: hidden;
     font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif; }
   #stage { position: fixed; inset: 0; }
   canvas { display: block; }
@@ -14,7 +14,7 @@
     position: fixed; left: 16px; top: 16px; z-index: 10;
     background: rgba(18,24,32,0.72); color: #e7eef5; backdrop-filter: blur(8px);
     border: 1px solid rgba(255,255,255,0.12); border-radius: 12px; padding: 12px 14px;
-    max-width: 260px;
+    max-width: 268px;
   }
   .panel h1 { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
   .panel p { margin: 0 0 10px; font-size: 12px; color: #9fb0c0; line-height: 1.5; }
@@ -35,7 +35,7 @@
 <div id="stage"></div>
 <div class="panel">
   <h1>Air handler — 3D</h1>
-  <p>A real-time 3D model (metal, lighting, shadows, reflections). Drag to orbit, scroll to zoom.</p>
+  <p>Real-time 3D: insulated cabinet, intake louvers, access doors, a centrifugal blower wheel, and galvanized ducts. Drag to orbit, scroll to zoom.</p>
   <div class="row">
     <button id="btnHeat" class="on">Heating</button>
     <button id="btnCool">Cooling</button>
@@ -43,13 +43,13 @@
   </div>
 </div>
 <div class="hint">drag to orbit · scroll to zoom</div>
-<div class="tag">world-model-hvac · proof</div>
+<div class="tag">world-model-hvac · 3D</div>
 
 <script src="./three.min.js"></script>
 <script>
 "use strict";
 const { Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3,
-  BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry, SphereGeometry,
+  BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry,
   MeshStandardMaterial, MeshBasicMaterial, ShadowMaterial,
   DirectionalLight, HemisphereLight, AmbientLight,
   PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace,
@@ -62,39 +62,38 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = PCFSoftShadowMap;
 renderer.toneMapping = ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 1.25;
 renderer.outputColorSpace = SRGBColorSpace;
 stage.appendChild(renderer.domElement);
 
 const scene = new Scene();
-scene.background = new Color(0x11161c);
+scene.background = new Color(0x12181f);
 
 const camera = new PerspectiveCamera(42, innerWidth / innerHeight, 0.1, 200);
 
-/* ---- a small studio environment so the metal has something to reflect ---- */
+/* studio environment for metal reflections */
 function studioEnv() {
   const pmrem = new PMREMGenerator(renderer);
   const env = new Scene();
-  env.background = new Color(0x2a3038);
+  env.background = new Color(0x3a424c);
   const light = (hex, x, y, z, sx, sy, sz) => {
     const m = new Mesh(new BoxGeometry(sx, sy, sz), new MeshBasicMaterial({ color: hex }));
     m.position.set(x, y, z); env.add(m);
   };
-  light(0xffffff, 0, 12, 0, 14, 0.2, 14);   // soft top
-  light(0xbcd2ff, -10, 4, 5, 0.2, 9, 12);   // cool key
-  light(0xffe4c0, 9, 3, -6, 0.2, 8, 12);    // warm fill
-  light(0x8a96a4, 0, 2, 12, 16, 8, 0.2);    // front bounce
+  light(0xffffff, 0, 12, 0, 16, 0.2, 16);
+  light(0xc6d8ff, -10, 4, 5, 0.2, 10, 13);
+  light(0xffe6c4, 9, 3, -6, 0.2, 9, 13);
+  light(0xaab6c4, 0, 2, 13, 18, 9, 0.2);
   const tex = pmrem.fromScene(env, 0.03).texture;
   pmrem.dispose();
   return tex;
 }
 scene.environment = studioEnv();
 
-/* ---- lights ---- */
-scene.add(new HemisphereLight(0xdfe8f2, 0x2a2f36, 0.55));
-scene.add(new AmbientLight(0xffffff, 0.12));
-const key = new DirectionalLight(0xffffff, 2.4);
-key.position.set(7, 12, 8);
+scene.add(new HemisphereLight(0xe6eef7, 0x2c333b, 0.7));
+scene.add(new AmbientLight(0xffffff, 0.18));
+const key = new DirectionalLight(0xffffff, 2.6);
+key.position.set(7, 13, 8);
 key.castShadow = true;
 key.shadow.mapSize.set(2048, 2048);
 key.shadow.camera.near = 1; key.shadow.camera.far = 60;
@@ -102,101 +101,110 @@ key.shadow.camera.left = -14; key.shadow.camera.right = 14;
 key.shadow.camera.top = 14; key.shadow.camera.bottom = -14;
 key.shadow.bias = -0.0003;
 scene.add(key);
-const rim = new DirectionalLight(0x9fc0ff, 0.6);
-rim.position.set(-8, 6, -8);
+const rim = new DirectionalLight(0xbcd2ff, 0.7);
+rim.position.set(-9, 6, -8);
 scene.add(rim);
 
-/* ---- materials ---- */
-const steel = new MeshStandardMaterial({ color: 0xb7c0c9, metalness: 0.92, roughness: 0.34 });
-const steelDark = new MeshStandardMaterial({ color: 0x8b95a0, metalness: 0.9, roughness: 0.42 });
-const galv = new MeshStandardMaterial({ color: 0xc3c9cf, metalness: 0.86, roughness: 0.5 });
-const trim = new MeshStandardMaterial({ color: 0x333a42, metalness: 0.5, roughness: 0.55 });
-const coilMat = new MeshStandardMaterial({ color: 0x9aa3ac, metalness: 0.7, roughness: 0.4,
-  emissive: new Color(0xe0662a), emissiveIntensity: 0.55 });
+/* materials — light galvanized/painted panels, brighter than a mirror */
+const panel = new MeshStandardMaterial({ color: 0xcfd6dc, metalness: 0.55, roughness: 0.48 });
+const panelDark = new MeshStandardMaterial({ color: 0x9099a2, metalness: 0.55, roughness: 0.52 });
+const galv = new MeshStandardMaterial({ color: 0xc9d0d6, metalness: 0.82, roughness: 0.38 });
+const trim = new MeshStandardMaterial({ color: 0x3a424b, metalness: 0.5, roughness: 0.55 });
+const bright = new MeshStandardMaterial({ color: 0xe7ebf0, metalness: 0.7, roughness: 0.3 });
+const coilMat = new MeshStandardMaterial({ color: 0x9aa3ac, metalness: 0.6, roughness: 0.4,
+  emissive: new Color(0xe0662a), emissiveIntensity: 0.6 });
 
 const add = (geo, mat, parent, x = 0, y = 0, z = 0) => {
   const m = new Mesh(geo, mat); m.position.set(x, y, z);
   m.castShadow = true; m.receiveShadow = true; (parent || scene).add(m); return m;
 };
 
-/* ---- the AHU ---- */
-const ahu = new Group();
-scene.add(ahu);
+const ahu = new Group(); scene.add(ahu);
 const BODY_Y = 3.4;
 
-// main casing
-const casing = add(new BoxGeometry(4.6, 2.0, 2.0), steel, ahu, 0, BODY_Y, 0);
-// panel seams (thin recessed frames on the front face)
-for (const sx of [-1.5, -0.4, 0.7]) {
-  add(new BoxGeometry(0.03, 1.8, 0.02), steelDark, ahu, sx, BODY_Y, 1.01);
+/* ---- cabinet ---- */
+add(new BoxGeometry(4.8, 2.0, 2.0), panel, ahu, 0, BODY_Y, 0);
+// corner posts (double-wall frame look)
+for (const sx of [-2.4, 2.4]) for (const sz of [-1.0, 1.0])
+  add(new BoxGeometry(0.1, 2.02, 0.1), trim, ahu, sx, BODY_Y, sz);
+for (const sy of [-1.0, 1.0]) for (const sz of [-1.0, 1.0])
+  add(new BoxGeometry(4.82, 0.1, 0.1), trim, ahu, 0, BODY_Y + sy, sz);
+// base channel + housekeeping pad legs
+for (const sz of [-0.82, 0.82]) add(new BoxGeometry(4.9, 0.16, 0.18), trim, ahu, 0, BODY_Y - 1.05, sz);
+// lifting lugs
+for (const sx of [-1.9, 1.9]) add(new BoxGeometry(0.12, 0.12, 0.5), panelDark, ahu, sx, BODY_Y + 1.06, 0);
+
+/* ---- intake louver bank on the -x end ---- */
+for (let i = -3; i <= 3; i++) {
+  const l = add(new BoxGeometry(0.06, 0.16, 1.5), panelDark, ahu, -2.41, BODY_Y + i * 0.24, 0);
+  l.rotation.z = 0.55;
 }
-// top lifting lugs
-for (const sx of [-1.8, 1.8]) add(new BoxGeometry(0.12, 0.12, 0.5), steelDark, ahu, sx, BODY_Y + 1.06, 0);
-// base rails
-for (const sz of [-0.8, 0.8]) add(new BoxGeometry(4.7, 0.14, 0.16), trim, ahu, 0, BODY_Y - 1.02, sz);
+add(new BoxGeometry(0.05, 1.9, 1.7), trim, ahu, -2.42, BODY_Y, 0);
 
-// intake hood (angled box on the -x end) + louvers
-const hood = add(new BoxGeometry(0.7, 1.7, 1.7), steel, ahu, -2.6, BODY_Y, 0);
-hood.rotation.z = 0.12;
-for (let i = -3; i <= 3; i++)
-  add(new BoxGeometry(0.06, 0.12, 1.5), trim, ahu, -2.95, BODY_Y + i * 0.22, 0).rotation.z = 0.5;
-
-// control panel on the front
-add(new BoxGeometry(0.5, 0.7, 0.06), trim, ahu, 1.6, BODY_Y - 0.1, 1.02);
-
-// fan on the +x end (recessed ring + hub + blades)
-const fanHub = new Group(); fanHub.position.set(2.32, BODY_Y, 0); ahu.add(fanHub);
-add(new TorusGeometry(0.66, 0.12, 16, 40), steelDark, fanHub).rotation.y = Math.PI / 2;
-add(new CylinderGeometry(0.55, 0.55, 0.14, 36), steelDark, fanHub).rotation.z = Math.PI / 2;
-const blades = new Group(); fanHub.add(blades);
-add(new CylinderGeometry(0.12, 0.12, 0.22, 20), steel, blades).rotation.z = Math.PI / 2;
-for (let i = 0; i < 9; i++) {
-  const b = add(new BoxGeometry(0.06, 0.5, 0.16), steel, blades, 0.06, 0, 0);
-  b.position.y = Math.cos((i / 9) * Math.PI * 2) * 0.3;
-  b.position.z = Math.sin((i / 9) * Math.PI * 2) * 0.3;
-  b.rotation.x = (i / 9) * Math.PI * 2;
-  b.rotation.z = 0.5;
+/* ---- front access doors (facing +z) ---- */
+function door(cx, w, withView) {
+  add(new BoxGeometry(w + 0.06, 1.82, 0.03), trim, ahu, cx, BODY_Y, 0.99);   // frame
+  add(new BoxGeometry(w, 1.72, 0.05), panel, ahu, cx, BODY_Y, 1.01);          // leaf
+  add(new BoxGeometry(0.06, 0.44, 0.1), bright, ahu, cx + w / 2 - 0.14, BODY_Y - 0.1, 1.05); // handle
+  for (const hy of [0.72, -0.72]) add(new BoxGeometry(0.05, 0.16, 0.08), trim, ahu, cx - w / 2 + 0.02, BODY_Y + hy, 1.04); // hinges
+  if (withView) {
+    add(new BoxGeometry(0.5, 0.5, 0.02), coilMat, ahu, cx, BODY_Y + 0.35, 1.04);   // sight glass -> coil
+    add(new BoxGeometry(0.58, 0.58, 0.03), trim, ahu, cx, BODY_Y + 0.35, 1.03);
+  }
 }
+door(-1.35, 1.15, true);
+door(0.15, 1.35, false);
+// small control box
+add(new BoxGeometry(0.42, 0.6, 0.12), trim, ahu, 1.75, BODY_Y + 0.1, 1.02);
+add(new BoxGeometry(0.24, 0.12, 0.02), bright, ahu, 1.75, BODY_Y + 0.28, 1.09);
 
-// coil bank hint (visible through a framed opening on the front)
-add(new BoxGeometry(0.9, 1.5, 0.05), coilMat, ahu, -0.4, BODY_Y, 1.0);
-add(new BoxGeometry(1.0, 1.6, 0.04), trim, ahu, -0.4, BODY_Y, 1.0);
+/* ---- centrifugal blower on the +x end ---- */
+const blower = new Group(); blower.position.set(2.42, BODY_Y, 0); ahu.add(blower);
+// round housing opening
+add(new TorusGeometry(0.74, 0.13, 16, 46), panelDark, blower).rotation.y = Math.PI / 2;
+add(new CylinderGeometry(0.74, 0.74, 0.12, 46, 1, true), panelDark, blower).rotation.z = Math.PI / 2;
+// inner recess
+add(new CylinderGeometry(0.66, 0.66, 0.5, 40, 1, true), trim, blower, -0.28, 0, 0).rotation.z = Math.PI / 2;
+// the wheel: two rings + backward-curved blades + hub
+const wheel = new Group(); wheel.position.x = -0.05; blower.add(wheel);
+add(new TorusGeometry(0.58, 0.05, 12, 40), bright, wheel).rotation.y = Math.PI / 2;
+const back = add(new TorusGeometry(0.58, 0.05, 12, 40), bright, wheel, -0.3, 0, 0); back.rotation.y = Math.PI / 2;
+add(new CylinderGeometry(0.14, 0.14, 0.42, 22), panelDark, wheel).rotation.z = Math.PI / 2;
+for (let i = 0; i < 20; i++) {
+  const a = (i / 20) * Math.PI * 2;
+  const b = add(new BoxGeometry(0.34, 0.22, 0.025), bright, wheel, -0.15, Math.cos(a) * 0.46, Math.sin(a) * 0.46);
+  b.rotation.x = a; b.rotation.z = 0.6; // backward-curved tilt
+}
+// motor below the blower with a belt guard
+const motor = add(new CylinderGeometry(0.24, 0.24, 0.8, 24), trim, ahu, 2.0, BODY_Y - 0.86, 0.0); motor.rotation.z = Math.PI / 2;
+add(new CylinderGeometry(0.1, 0.1, 0.3, 16), panelDark, ahu, 2.34, BODY_Y - 0.86, 0.0).rotation.z = Math.PI / 2;
+add(new BoxGeometry(0.14, 0.7, 0.5), panelDark, ahu, 2.34, BODY_Y - 0.5, 0.0); // belt guard
 
-/* ---- galvanized duct manifolds dropping to the floor ---- */
+/* ---- galvanized supply ducts dropping to the floor ---- */
 function ductManifold(cx) {
   const g = new Group(); ahu.add(g);
-  const headerY = BODY_Y - 1.15;
-  // horizontal header under the casing
-  const header = add(new CylinderGeometry(0.28, 0.28, 2.0, 28), galv, g, cx, headerY, 0);
-  header.rotation.x = Math.PI / 2;
-  // riser connecting casing to header
-  add(new CylinderGeometry(0.26, 0.26, 0.35, 24), galv, g, cx, headerY + 0.35, 0);
-  // three vertical drops with flared feet
+  const headerY = BODY_Y - 1.18;
+  const header = add(new CylinderGeometry(0.28, 0.28, 2.0, 28), galv, g, cx, headerY, 0); header.rotation.x = Math.PI / 2;
+  add(new CylinderGeometry(0.26, 0.26, 0.32, 24), galv, g, cx, headerY + 0.34, 0);
   for (const dz of [-0.7, 0, 0.7]) {
-    const dropTop = headerY;
-    const dropLen = dropTop - 0.55;
-    add(new CylinderGeometry(0.22, 0.22, dropLen, 24), galv, g, cx, dropTop - dropLen / 2, dz);
-    // elbow
+    const len = headerY - 0.55;
+    add(new CylinderGeometry(0.22, 0.22, len, 24), galv, g, cx, headerY - len / 2, dz);
     add(new TorusGeometry(0.22, 0.22, 12, 20, Math.PI / 2), galv, g, cx, 0.6, dz);
-    // flared foot
     add(new CylinderGeometry(0.34, 0.22, 0.3, 24), galv, g, cx, 0.2, dz);
-    add(new CylinderGeometry(0.36, 0.36, 0.05, 24), steelDark, g, cx, 0.05, dz);
+    add(new CylinderGeometry(0.37, 0.37, 0.05, 24), panelDark, g, cx, 0.05, dz);
   }
-  return g;
 }
-ductManifold(-1.4);
-ductManifold(1.4);
+ductManifold(-1.4); ductManifold(1.4);
 
-/* ---- ground ---- */
-const ground = new Mesh(new PlaneGeometry(80, 80), new ShadowMaterial({ opacity: 0.32 }));
-ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
-const floor = new Mesh(new PlaneGeometry(80, 80),
-  new MeshStandardMaterial({ color: 0x161c23, metalness: 0.1, roughness: 0.9 }));
-floor.rotation.x = -Math.PI / 2; floor.position.y = -0.001; floor.receiveShadow = true; scene.add(floor);
+/* ---- floor ---- */
+const shadow = new Mesh(new PlaneGeometry(80, 80), new ShadowMaterial({ opacity: 0.3 }));
+shadow.rotation.x = -Math.PI / 2; shadow.receiveShadow = true; scene.add(shadow);
+const floor = new Mesh(new PlaneGeometry(80, 80), new MeshStandardMaterial({ color: 0x1a212a, metalness: 0.1, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.002; floor.receiveShadow = true; scene.add(floor);
 
-/* ---- simple orbit control ---- */
-let az = 0.85, pol = 1.15, rad = 13;
-const target = new Vector3(0, 2.6, 0);
+/* ---- orbit ---- */
+let az = 0.9, pol = 1.12, rad = 13;
+const target = new Vector3(0, 2.7, 0);
 function updateCam() {
   camera.position.set(
     target.x + rad * Math.sin(pol) * Math.sin(az),
@@ -231,11 +239,10 @@ addEventListener("resize", () => {
 });
 
 updateCam();
-let auto = 0;
 function tick() {
   requestAnimationFrame(tick);
-  if (fanOn) blades.rotation.x += 0.35;
-  auto += 0.0015; az += 0.0006; updateCam(); // gentle idle drift
+  if (fanOn) wheel.rotation.x += 0.32;
+  az += 0.0006; updateCam();
   renderer.render(scene, camera);
 }
 tick();
