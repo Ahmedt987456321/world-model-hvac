@@ -410,4 +410,82 @@ BUILD.expansiontank = () => {
   return { group: g, spin: [] };
 };
 
+BUILD.recoveryWheel = () => {
+  const g = new Group(); const Y = 2.2;
+  add(new BoxGeometry(0.9, 4.2, 4.2), M.galv, g, 0, Y, 0);                 // casing
+  add(new BoxGeometry(0.95, 0.18, 4.2), M.trim, g, 0, Y, 0);              // supply/exhaust divider
+  const wheel = new Group(); wheel.position.set(0, Y, 0); wheel.userData.spinAxis = "x"; g.add(wheel);
+  add(new CylinderGeometry(1.75, 1.75, 0.5, 48), M.dark, wheel).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(1.6, 1.6, 0.56, 48, 1, true), M.panel, wheel).rotation.z = Math.PI / 2;
+  for (let r = 0.4; r < 1.6; r += 0.34) add(new TorusGeometry(r, 0.02, 8, 44), M.trim, wheel).rotation.y = Math.PI / 2; // honeycomb rings
+  for (let i = 0; i < 12; i++) add(new BoxGeometry(0.5, 1.5, 0.035), M.trim, wheel).rotation.x = (i / 12) * Math.PI * 2; // spokes
+  add(new CylinderGeometry(0.22, 0.22, 0.7, 16), M.dark, wheel).rotation.z = Math.PI / 2; // hub
+  add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.blue, g, 0.1, Y - 2.15, 1.4).rotation.z = Math.PI / 2; // drive motor
+  return { group: g, spin: [wheel] };
+};
+
+BUILD.aircooled = () => {
+  const g = new Group(); const Y = 1.5; const spin = [];
+  add(new BoxGeometry(9.2, 0.4, 3.0), M.trim, g, 0, 0.2, 0);              // skid frame
+  add(new BoxGeometry(8.6, 1.9, 2.6), M.panel, g, 0, Y, 0);              // body
+  for (const s of [1, -1]) for (let i = 0; i < 10; i++)                  // V-coil banks on the sides
+    add(new BoxGeometry(0.72, 1.7, 0.03), M.dark, g, -3.6 + i * 0.8, Y, s * 1.45).rotation.y = s * 0.32;
+  for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) {                            // row of up-blast fans
+    add(new TorusGeometry(0.72, 0.07, 12, 34), M.trim, g, x, Y + 1.0, 0).rotation.x = Math.PI / 2;
+    spin.push(axialFan(g, x, Y + 1.05, 0, 0.66, 6, M.dark));
+  }
+  add(new BoxGeometry(0.7, 1.7, 2.7), M.trim, g, 4.5, Y, 0);             // compressor / control end
+  add(new BoxGeometry(0.05, 0.8, 1.2), M.blue, g, 4.86, Y + 0.2, 0);
+  return { group: g, spin };
+};
+
+BUILD.solarThermal = () => {
+  const g = new Group();
+  const p = new Group(); p.rotation.x = -0.62; p.position.y = 1.7; g.add(p);
+  add(new BoxGeometry(5.2, 0.28, 3.3), M.trim, p, 0, 0, 0);              // frame
+  add(new BoxGeometry(4.8, 0.12, 3.0), new MeshStandardMaterial({ color: 0x10141b, metalness: 0.35, roughness: 0.55 }), p, 0, 0.12, 0); // absorber
+  for (let i = 0; i < 7; i++) add(new CylinderGeometry(0.045, 0.045, 3.0, 10), M.copper, p, -2 + i * 0.66, 0.16, 0).rotation.x = Math.PI / 2; // risers
+  for (const z of [1.45, -1.45]) add(new CylinderGeometry(0.08, 0.08, 4.9, 14), M.copper, p, 0, 0.16, z).rotation.z = Math.PI / 2; // headers
+  add(new BoxGeometry(4.8, 0.04, 3.0), new MeshStandardMaterial({ color: 0x27384a, metalness: 0.1, roughness: 0.06, transparent: true, opacity: 0.32 }), p, 0, 0.26, 0); // glazing
+  for (const x of [-2.4, 2.4]) {                                        // tilted ground stand
+    add(new BoxGeometry(0.14, 0.14, 3.6), M.trim, g, x, 0.1, 0);
+    add(new BoxGeometry(0.14, 2.5, 0.14), M.trim, g, x, 1.25, -1.5);
+    add(new BoxGeometry(0.14, 0.7, 0.14), M.trim, g, x, 0.4, 1.5);
+  }
+  return { group: g, spin: [] };
+};
+
+BUILD.pv = () => {
+  const g = new Group();
+  const p = new Group(); p.rotation.x = -0.5; p.position.y = 1.9; g.add(p);
+  add(new BoxGeometry(6.2, 0.14, 3.3), M.trim, p, 0, 0, 0);              // frame
+  const cell = new MeshStandardMaterial({ color: 0x1a2b4c, metalness: 0.45, roughness: 0.32 });
+  for (let i = 0; i < 6; i++) for (let j = 0; j < 3; j++) add(new BoxGeometry(0.92, 0.06, 0.92), cell, p, -2.5 + i * 1.0, 0.12, -1.0 + j * 1.0);
+  for (const x of [-2.85, 2.85]) {                                      // tilted ground stand
+    add(new BoxGeometry(0.15, 0.15, 3.6), M.trim, g, x, 0.1, 0);
+    add(new BoxGeometry(0.15, 2.7, 0.15), M.trim, g, x, 1.35, -1.4);
+    add(new BoxGeometry(0.15, 1.1, 0.15), M.trim, g, x, 0.55, 1.4);
+  }
+  return { group: g, spin: [] };
+};
+
+BUILD.radiator = () => {
+  const g = new Group(); const Y = 1.4;
+  add(new BoxGeometry(3.4, 2.0, 0.28), M.panel, g, 0, Y, 0.16);          // front panel
+  add(new BoxGeometry(3.4, 2.0, 0.28), M.panel, g, 0, Y, -0.16);         // back panel
+  for (let i = 0; i < 22; i++) add(new BoxGeometry(0.05, 1.9, 0.34), M.dark, g, -1.6 + i * 0.152, Y, 0); // convector fins
+  add(new BoxGeometry(3.4, 0.12, 0.6), M.dark, g, 0, Y + 1.05, 0);       // top grille
+  for (const x of [-1.4, 1.4]) add(new CylinderGeometry(0.09, 0.09, 0.5, 12), M.copper, g, x, Y - 1.2, 0); // connections
+  add(new BoxGeometry(0.26, 0.26, 0.26), M.blue, g, -1.4, Y - 1.45, 0);  // TRV valve
+  return { group: g, spin: [] };
+};
+
+BUILD.diffuser = () => {
+  const g = new Group(); const Y = 2.6;
+  add(new BoxGeometry(3.0, 0.1, 3.0), M.panel, g, 0, Y, 0);              // ceiling flange
+  for (let i = 0; i < 3; i++) { const s = 2.4 - i * 0.6; add(new BoxGeometry(s, 0.16, s), M.panel, g, 0, Y - 0.22 - i * 0.3, 0); }
+  add(new CylinderGeometry(0.72, 0.72, 0.7, 24), M.galv, g, 0, Y + 0.42, 0); // round neck
+  return { group: g, spin: [] };
+};
+
 export { BUILD, M, add };

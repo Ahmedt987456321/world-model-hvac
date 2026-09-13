@@ -119,6 +119,7 @@ const CATALOG = [
   { key: "chiller", name: "Water-Cooled Chiller", desc: "Evaporator & condenser shells, a compressor and refrigerant circuit — the heart of the district cooling plant." },
   { key: "tower", name: "Cooling Tower", desc: "Induced-draft tower: an axial fan on the deck pulls air up through low intake louvers to reject condenser heat." },
   { key: "pump", name: "Centrifugal Pump", desc: "End-suction volute pump: axial suction, top discharge, coupled to a motor on a common baseplate." },
+  { key: "aircooled", name: "Air-Cooled Chiller", desc: "Rooftop skid with V-shaped condenser coils and a row of up-blast fans — rejects heat straight to the air, no tower needed." },
   { key: "tes", name: "Thermal Storage Tank", desc: "Tall insulated stratified chilled-water tank — stores cold overnight to shave the district plant's daytime peak." },
   { key: "rtu", name: "Packaged Rooftop Unit", desc: "Self-contained cabinet on a roof curb: up-blast condenser fans, coil louvers, a fresh-air hood, and bottom duct connections." },
   { key: "fcu", name: "Fan Coil Unit", desc: "Compact ceiling cabinet: a small blower, a 2- or 4-pipe coil, a filter and a return grille — one per zone." },
@@ -136,10 +137,17 @@ const CATALOG = [
   { key: "humidifier", name: "Steam Humidifier", desc: "A steam generator canister feeding a stainless dispersion tube across the duct to add moisture to the supply air." },
   { key: "silencer", name: "Duct Silencer", desc: "A rectangular sound attenuator: perforated splitter baffles in a galvanized casing with evasé ends to cut fan noise." },
   { key: "expansiontank", name: "Expansion Tank", desc: "A pre-charged diaphragm vessel on the hydronic loop that absorbs water's thermal expansion and holds system pressure." },
+  { cat: "Recovery & renewables" },
+  { key: "recoveryWheel", name: "Energy Recovery Wheel", desc: "A slowly rotating enthalpy wheel between supply and exhaust that recovers heat and moisture — free pre-conditioning." },
+  { key: "solarThermal", name: "Solar Thermal Collector", desc: "A glazed flat-plate collector: a dark absorber and copper risers under glass, heating water from the sun." },
+  { key: "pv", name: "Solar PV Array", desc: "A tilted array of photovoltaic panels that powers the plant — renewables tied straight into the world model." },
+  { cat: "Terminals" },
+  { key: "radiator", name: "Panel Radiator", desc: "A hydronic panel with convector fins and a thermostatic valve — heats a room by radiation and convection." },
+  { key: "diffuser", name: "Ceiling Diffuser", desc: "A square multi-cone supply diffuser that spreads conditioned air evenly across the space below." },
 ];
 
-/* the whole conventional HVAC plant is now modelled */
-const SOON = [];
+/* the library is extensible — more candidates to model */
+const SOON = ["Absorption Chiller", "Ground-Source Heat Pump", "Dry Cooler", "Unit Heater", "Chilled Beam", "CRAC Unit"];
 
 /* ---------- build the list ---------- */
 const listEl = document.getElementById("list");
