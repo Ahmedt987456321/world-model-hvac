@@ -454,6 +454,68 @@ BUILD.sensor = () => {
   return { group: g, spin: [] };
 };
 
+BUILD.economizer = () => {
+  const g = new Group(); const Y = 1.9;
+  add(new BoxGeometry(3.4, 3.0, 2.4), M.panel, g, 0, Y, 0);                           // mixing-box section
+  for (const sx of [-1.7, 1.7]) for (const sz of [-1.2, 1.2]) add(new BoxGeometry(0.1, 3.0, 0.1), M.trim, g, sx, Y, sz);
+  // OA damper (front) — blue tag
+  for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, g, 0, Y - 0.85 + i * 0.34, 1.21).rotation.x = 0.55;
+  add(new BoxGeometry(0.5, 0.5, 0.35), M.yellow, g, 1.45, Y, 1.2);                    // OA actuator
+  add(new BoxGeometry(0.5, 0.22, 0.03), M.blue, g, -1.0, Y + 1.2, 1.22);             // OA label plate
+  // RA damper (back) — green tag
+  for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, g, 0, Y - 0.85 + i * 0.34, -1.21).rotation.x = -0.55;
+  add(new BoxGeometry(0.5, 0.22, 0.03), M.green, g, -1.0, Y + 1.2, -1.22);           // RA label plate
+  // EA damper (top) — warm tag
+  for (let i = 0; i < 5; i++) add(new BoxGeometry(0.3, 0.06, 1.9), M.dark, g, -1.0 + i * 0.5, Y + 1.51, 0).rotation.z = 0.55;
+  add(new BoxGeometry(0.5, 0.5, 0.35), M.yellow, g, -1.4, Y + 1.5, 0.9);             // EA actuator
+  return { group: g, spin: [] };
+};
+
+BUILD.humidifier = () => {
+  const g = new Group(); const Y = 1.7;
+  add(new BoxGeometry(3.0, 1.7, 1.7), M.galv, g, 0.4, Y, 0);                          // duct section
+  for (const x of [-1.05, 1.85]) add(new BoxGeometry(0.05, 1.8, 1.8), M.dark, g, x, Y, 0); // flanges
+  // stainless dispersion tube across the duct + orifices
+  add(new CylinderGeometry(0.12, 0.12, 1.6, 20), M.bright, g, 0.4, Y + 0.35, 0).rotation.x = Math.PI / 2;
+  for (let i = 0; i < 6; i++) add(new CylinderGeometry(0.03, 0.03, 0.14, 8), M.bright, g, 0.4, Y + 0.52, -0.62 + i * 0.25);
+  // steam generator canister (vertical) + control box beside the duct
+  add(new CylinderGeometry(0.52, 0.52, 1.8, 28), M.dark, g, -1.9, Y - 0.2, 0);
+  add(new SphereGeometry(0.52, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.dark, g, -1.9, Y + 0.7, 0);
+  add(new BoxGeometry(0.28, 0.9, 0.6), M.blue, g, -1.9, Y + 0.1, 0.66);              // controller
+  // steam hose from canister up into the dispersion tube
+  add(new CylinderGeometry(0.08, 0.08, 1.3, 12), M.trim, g, -0.85, Y + 0.7, 0.4).rotation.z = 0.8;
+  return { group: g, spin: [] };
+};
+
+BUILD.silencer = () => {
+  const g = new Group(); const Y = 1.6;
+  add(new BoxGeometry(3.2, 1.9, 2.1), M.galv, g, 0, Y, 0);                            // rectangular casing
+  add(new BoxGeometry(0.6, 1.4, 1.6), M.galv, g, -1.9, Y, 0);                         // evasé entry
+  add(new BoxGeometry(0.6, 1.4, 1.6), M.galv, g, 1.9, Y, 0);                          // evasé exit
+  for (const x of [-2.2, 2.2]) add(new BoxGeometry(0.05, 1.5, 1.7), M.dark, g, x, Y, 0); // end flanges
+  // internal splitter baffles (perforated), visible through the ends
+  for (let i = 0; i < 4; i++) add(new BoxGeometry(3.0, 1.6, 0.16), M.dark, g, 0, Y, -0.72 + i * 0.48);
+  add(new BoxGeometry(3.24, 0.06, 2.14), M.trim, g, 0, Y + 0.95, 0);                  // top seam
+  return { group: g, spin: [] };
+};
+
+BUILD.expansiontank = () => {
+  const g = new Group();
+  add(new CylinderGeometry(0.92, 0.92, 3.0, 36), M.blue, g, 0, 2.0, 0);              // vessel
+  add(new SphereGeometry(0.92, 36, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.blue, g, 0, 3.5, 0); // domed top
+  add(new SphereGeometry(0.92, 36, 16, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), M.blue, g, 0, 0.5, 0); // dished bottom
+  // ring base
+  add(new CylinderGeometry(1.02, 1.02, 0.22, 36, 1, true), M.trim, g, 0, 0.35, 0);
+  add(new TorusGeometry(0.98, 0.08, 10, 36), M.trim, g, 0, 0.24, 0).rotation.x = Math.PI / 2;
+  // system water connection (bottom) + flange
+  add(new CylinderGeometry(0.18, 0.18, 0.55, 16), M.dark, g, 0, 0.0, 0);
+  add(new CylinderGeometry(0.28, 0.28, 0.08, 16), M.bright, g, 0, -0.28, 0);
+  // air charge valve on top
+  add(new CylinderGeometry(0.07, 0.07, 0.28, 12), M.dark, g, 0, 4.05, 0);
+  add(new BoxGeometry(0.45, 0.3, 0.02), M.bright, g, 0, 2.3, 0.93);                   // nameplate
+  return { group: g, spin: [] };
+};
+
 /* ---------- catalog ---------- */
 const CATALOG = [
   { cat: "Air side" },
@@ -476,10 +538,15 @@ const CATALOG = [
   { key: "valve", name: "Control Valve", desc: "A two-way globe valve with an electric actuator — modulates chilled- or hot-water flow to coils." },
   { key: "ducts", name: "Duct & Fittings", desc: "Rectangular trunk, a 90° elbow, a square-to-round transition and a round takeoff — the air distribution." },
   { key: "sensor", name: "Sensor & DDC", desc: "A duct temperature sensor with a probe in the airstream, wired to a DDC controller panel — the nervous system." },
+  { cat: "Accessories" },
+  { key: "economizer", name: "Economizer / Mixing Box", desc: "An AHU section with outdoor-, return- and exhaust-air dampers that mix streams and free-cool when the outside air is favourable." },
+  { key: "humidifier", name: "Steam Humidifier", desc: "A steam generator canister feeding a stainless dispersion tube across the duct to add moisture to the supply air." },
+  { key: "silencer", name: "Duct Silencer", desc: "A rectangular sound attenuator: perforated splitter baffles in a galvanized casing with evasé ends to cut fan noise." },
+  { key: "expansiontank", name: "Expansion Tank", desc: "A pre-charged diaphragm vessel on the hydronic loop that absorbs water's thermal expansion and holds system pressure." },
 ];
 
-/* the library is extensible — these are candidates still to model */
-const SOON = ["Humidifier", "Air Economizer", "Duct Silencer", "Expansion Tank"];
+/* the whole conventional HVAC plant is now modelled */
+const SOON = [];
 
 /* ---------- build the list ---------- */
 const listEl = document.getElementById("list");
@@ -490,11 +557,14 @@ function buildList() {
     if (row.cat) { html += `<div class="cat">${row.cat}</div>`; continue; }
     html += `<button class="item" data-key="${row.key}"><span class="dot"></span>${row.name}</button>`;
   }
-  html += `<div class="cat">Coming next</div>`;
-  for (const s of SOON) html += `<button class="item" disabled style="opacity:.5;cursor:default"><span class="dot"></span>${s}<span class="soon">soon</span></button>`;
+  if (SOON.length) {
+    html += `<div class="cat">Coming next</div>`;
+    for (const s of SOON) html += `<button class="item" disabled style="opacity:.5;cursor:default"><span class="dot"></span>${s}<span class="soon">soon</span></button>`;
+  }
   listEl.innerHTML = html;
   listEl.querySelectorAll(".item[data-key]").forEach((b) => b.addEventListener("click", () => select(b.dataset.key)));
-  document.getElementById("count").textContent = CATALOG.filter((r) => r.key).length + " models · " + SOON.length + " queued";
+  const nModels = CATALOG.filter((r) => r.key).length;
+  document.getElementById("count").textContent = nModels + " models" + (SOON.length ? " · " + SOON.length + " queued" : " · full HVAC plant");
 }
 
 /* ---------- selection / framing ---------- */
