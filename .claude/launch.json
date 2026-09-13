@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Thermal Canvas :5000",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "5000", "--bind", "0.0.0.0"],
+      "cwd": "canvas",
+      "port": 5000
+    }
+  ]
+}
