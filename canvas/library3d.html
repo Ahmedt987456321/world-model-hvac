@@ -64,6 +64,36 @@
   .out .ov { font-family: "IBM Plex Mono", monospace; font-size: 13px; color: #fff; font-weight: 500; }
   .out .ov small { color: #6a7d8f; font-weight: 400; }
   .no-phys { color: #6a7d8f; font-size: 12px; line-height: 1.6; }
+  /* tabs */
+  .ph-tabs { display: flex; gap: 6px; margin-top: 11px; }
+  .ph-tabs button { flex: 1; font: inherit; font-size: 12px; color: #9fb0c0; background: #0f151c;
+    border: 1px solid #22303d; border-radius: 7px; padding: 6px 0; cursor: pointer; }
+  .ph-tabs button.on { background: #17303a; border-color: #2fbccb; color: #7fe6f0; }
+  /* explode control */
+  .exp { background: #0c1118; border: 1px solid #22303d; border-radius: 9px; padding: 11px 12px; margin-bottom: 14px; }
+  .exp .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; }
+  .exp .row .lab { color: #cdd8e2; font-weight: 500; }
+  .exp .row .vv { font-family: "IBM Plex Mono", monospace; color: #7fe6f0; }
+  .exp input[type=range] { width: 100%; margin: 8px 0 0; accent-color: #2fbccb; height: 3px; }
+  .exp .hint { font-size: 10.5px; color: #6a7d8f; margin-top: 7px; line-height: 1.4; }
+  /* part list */
+  .part { border: 1px solid #1a2430; border-radius: 8px; padding: 9px 10px; margin-bottom: 7px; cursor: pointer;
+    transition: border-color 0.12s, background 0.12s; }
+  .part:hover, .part.hi { border-color: #2fbccb; background: #16242e; }
+  .part .pn { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: #eaf1f7; font-weight: 500; }
+  .part .idx { width: 17px; height: 17px; border-radius: 50%; background: #22303d; color: #9fdbe4; flex: none;
+    font-family: "IBM Plex Mono", monospace; font-size: 10px; display: grid; place-items: center; }
+  .part.hi .idx { background: #2fbccb; color: #06222a; }
+  .part .pf { font-size: 11px; color: #9fb0c0; line-height: 1.5; margin: 5px 0 0 25px; }
+  /* floating part callouts over the 3D */
+  #callouts { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+  .callout { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
+    background: rgba(12,17,24,0.86); border: 1px solid #2fbccb; color: #dff6f9; font-size: 11px;
+    padding: 3px 8px; border-radius: 20px; white-space: nowrap; backdrop-filter: blur(4px);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.4); }
+  .callout .cidx { color: #7fe6f0; font-family: "IBM Plex Mono", monospace; margin-right: 5px; }
+  .callout.hi { background: #2fbccb; color: #06222a; border-color: #7fe6f0; }
+  .callout.hi .cidx { color: #06343f; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/jsm/" } }
@@ -81,20 +111,27 @@
   <div class="viewer">
     <div id="stage"></div>
     <div class="label"><h2 id="mName">—</h2><p id="mDesc"></p></div>
+    <div id="callouts"></div>
     <div class="hud">
       <button id="btnSpin" class="on">Spin</button>
       <button id="btnAuto" class="on">Auto-rotate</button>
-      <button id="btnPhys" class="on">Physics</button>
+      <button id="btnPhys" class="on">Panel</button>
     </div>
     <div class="foot">drag to orbit · scroll to zoom</div>
     <div class="count" id="count"></div>
     <div class="phys" id="phys">
       <div class="ph-head">
-        <div class="ph-tag">Engineering model</div>
+        <div class="ph-tag">Machine</div>
         <h3 id="phTitle">—</h3>
-        <div class="ph-ref" id="phRef"></div>
+        <div class="ph-tabs">
+          <button id="tabBtnAnatomy" class="on" data-tab="anatomy">Anatomy</button>
+          <button id="tabBtnPhysics" data-tab="physics">Physics</button>
+        </div>
       </div>
-      <div class="ph-body" id="phBody"></div>
+      <div class="ph-body">
+        <div id="tabAnatomy"></div>
+        <div id="tabPhysics" hidden></div>
+      </div>
     </div>
   </div>
 </div>
@@ -104,12 +141,13 @@ import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { BUILD } from "./models3d.js";
 import { PHYSICS } from "./physics3d.js";
+import { ASSEMBLY } from "./parts3d.js";
 
 const {
   Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3,
   BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry, SphereGeometry, ConeGeometry,
   MeshStandardMaterial, ShadowMaterial, DirectionalLight, HemisphereLight, AmbientLight,
-  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils,
+  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils, BoxHelper,
 } = THREE;
 
 /* ---------- renderer / scene ---------- */
@@ -203,44 +241,108 @@ function buildList() {
 }
 
 /* ---------- selection / framing ---------- */
-let modelGroup = null, spinners = [];
+let modelGroup = null, spinners = [], curParts = [], expAmt = 0, hiPart = -1;
+const boxHelper = new BoxHelper(new THREE.Object3D(), 0x2fbccb);
+boxHelper.material.depthTest = false; boxHelper.material.transparent = true; boxHelper.visible = false;
+scene.add(boxHelper);
+
 function select(key) {
   const row = CATALOG.find((r) => r.key === key); if (!row) return;
   current = key;
   listEl.querySelectorAll(".item").forEach((b) => b.classList.toggle("on", b.dataset.key === key));
   document.getElementById("mName").textContent = row.name;
   document.getElementById("mDesc").textContent = row.desc;
+  document.getElementById("phTitle").textContent = row.name;
   if (modelGroup) scene.remove(modelGroup);
-  const built = BUILD[key]();
-  modelGroup = built.group; spinners = built.spin || [];
+  const build = ASSEMBLY[key] || BUILD[key];
+  const built = build();
+  modelGroup = built.group; spinners = built.spin || []; curParts = built.parts || [];
   scene.add(modelGroup);
   frame(modelGroup);
+  expAmt = 0; hiPart = -1; boxHelper.visible = false;
+  renderAnatomy(key);
   renderPhysics(key);
 }
 
-/* ---------- engineering-model panel ---------- */
-const phTitle = document.getElementById("phTitle");
-const phRef = document.getElementById("phRef");
-const phBody = document.getElementById("phBody");
+/* ---------- ANATOMY tab: named parts + explode ---------- */
+const anatEl = document.getElementById("tabAnatomy");
+const calloutEl = document.getElementById("callouts");
+function renderAnatomy() {
+  calloutEl.innerHTML = "";
+  if (!curParts.length) {
+    anatEl.innerHTML = `<p class="no-phys">Detailed internal anatomy for this machine is being modelled next. Available now — tap one and pull the <b>Explode</b> slider: Air Handling Unit, Water-Cooled Chiller, Cooling Tower, Centrifugal Pump, Centrifugal Fan, Fire-Tube Boiler, Air-Source Heat Pump.</p>`;
+    return;
+  }
+  anatEl.innerHTML =
+    `<div class="exp">
+       <div class="row"><span class="lab">Explode view</span><span class="vv" id="expVal">0%</span></div>
+       <input type="range" id="expSlider" min="0" max="100" value="0">
+       <div class="hint">Pull the machine apart to see every internal part. Tap a part below or a tag in the scene to highlight it.</div>
+     </div>
+     <div class="ph-sec">Parts · ${curParts.length}</div><div id="partList"></div>`;
+  const listWrap = anatEl.querySelector("#partList");
+  curParts.forEach((p, i) => {
+    const d = document.createElement("div"); d.className = "part"; d.dataset.i = i;
+    d.innerHTML = `<div class="pn"><span class="idx">${i + 1}</span>${p.userData.name}</div><div class="pf">${p.userData.fn}</div>`;
+    d.addEventListener("mouseenter", () => highlight(i));
+    d.addEventListener("mouseleave", () => highlight(-1));
+    d.addEventListener("click", () => { if (expAmt < 0.12) setExplode(0.6); highlight(i); });
+    listWrap.appendChild(d);
+    const c = document.createElement("div"); c.className = "callout"; c.dataset.i = i; c.hidden = true;
+    c.innerHTML = `<span class="cidx">${i + 1}</span>${p.userData.name}`;
+    c.addEventListener("mouseenter", () => highlight(i));
+    c.addEventListener("mouseleave", () => highlight(-1));
+    calloutEl.appendChild(c);
+  });
+  anatEl.querySelector("#expSlider").addEventListener("input", (e) => setExplode(parseInt(e.target.value) / 100));
+}
+function setExplode(t) {
+  expAmt = t;
+  const s = document.getElementById("expSlider"); if (s) s.value = Math.round(t * 100);
+  const v = document.getElementById("expVal"); if (v) v.textContent = Math.round(t * 100) + "%";
+}
+function highlight(i) {
+  hiPart = i;
+  anatEl.querySelectorAll(".part").forEach((el) => el.classList.toggle("hi", +el.dataset.i === i));
+  calloutEl.querySelectorAll(".callout").forEach((el) => el.classList.toggle("hi", +el.dataset.i === i));
+  if (i >= 0 && curParts[i]) { boxHelper.setFromObject(curParts[i]); boxHelper.visible = true; }
+  else boxHelper.visible = false;
+}
+const _v = new Vector3(), _box = new Box3();
+function updateExplode() {
+  for (const p of curParts) p.position.copy(p.userData.home).addScaledVector(p.userData.dir, expAmt);
+  if (hiPart >= 0 && curParts[hiPart]) boxHelper.setFromObject(curParts[hiPart]);
+  const show = expAmt > 0.02 && anatomyTab && physOn && curParts.length;
+  const w = stage.clientWidth, h = stage.clientHeight, cs = calloutEl.children;
+  for (let i = 0; i < curParts.length; i++) {
+    const el = cs[i]; if (!el) continue;
+    if (!show) { el.hidden = true; continue; }
+    _box.setFromObject(curParts[i]); _box.getCenter(_v); _v.project(camera);
+    if (_v.z > 1) { el.hidden = true; continue; }
+    el.hidden = false;
+    el.style.left = ((_v.x * 0.5 + 0.5) * w) + "px";
+    el.style.top = ((-_v.y * 0.5 + 0.5) * h) + "px";
+  }
+}
+
+/* ---------- PHYSICS tab: engineering model ---------- */
+const physBody = document.getElementById("tabPhysics");
 function renderPhysics(key) {
   const P = PHYSICS[key];
   if (!P) {
-    phTitle.textContent = "—";
-    phRef.textContent = "";
-    phBody.innerHTML = `<p class="no-phys">A governing model for this component is on the way. The 3D geometry shows how it is built; the physics layer describes how it behaves.</p>`;
+    physBody.innerHTML = `<p class="no-phys">A governing model for this component is on the way. The 3D geometry shows how it is built; the physics layer describes how it behaves.</p>`;
     return;
   }
-  phTitle.textContent = P.title;
-  phRef.textContent = P.ref;
   const vals = {};
   for (const [k, , , def] of P.inputs) vals[k] = def;
-
-  let html = `<div class="ph-sec">Governing law</div><div class="law">${P.law}</div>`;
-  html += `<div class="ph-sec">Inputs</div><div id="phInputs"></div>`;
-  html += `<div class="ph-sec">Computed outputs</div><div id="phOut"></div>`;
-  phBody.innerHTML = html;
-
-  const inWrap = phBody.querySelector("#phInputs");
+  physBody.innerHTML =
+    `<div class="ph-tag" style="color:#2fbccb">Engineering model</div>
+     <div style="font-size:14px;font-weight:600;margin:3px 0 1px">${P.title}</div>
+     <div class="ph-ref">${P.ref}</div>
+     <div class="ph-sec">Governing law</div><div class="law">${P.law}</div>
+     <div class="ph-sec">Inputs</div><div id="phInputs"></div>
+     <div class="ph-sec">Computed outputs</div><div id="phOut"></div>`;
+  const inWrap = physBody.querySelector("#phInputs");
   for (const [k, label, unit, def, min, max, step] of P.inputs) {
     const d = document.createElement("div"); d.className = "inp";
     d.innerHTML =
@@ -249,23 +351,29 @@ function renderPhysics(key) {
       `<input type="range" min="${min}" max="${max}" step="${step}" value="${def}" data-k="${k}">`;
     const slider = d.querySelector("input");
     const vspan = d.querySelector(`[data-v="${k}"]`);
-    slider.addEventListener("input", () => {
-      vals[k] = parseFloat(slider.value);
-      vspan.textContent = slider.value;
-      computeOut(P, vals);
-    });
+    slider.addEventListener("input", () => { vals[k] = parseFloat(slider.value); vspan.textContent = slider.value; computeOut(P, vals); });
     inWrap.appendChild(d);
   }
   computeOut(P, vals);
 }
 function computeOut(P, vals) {
   const rows = P.compute({ ...vals });
-  const out = phBody.querySelector("#phOut");
-  out.innerHTML = rows.map(([label, value, unit]) =>
+  physBody.querySelector("#phOut").innerHTML = rows.map(([label, value, unit]) =>
     `<div class="out"><span class="ol">${label}</span>` +
     `<span class="ov">${value}${unit ? ` <small>${unit}</small>` : ""}</span></div>`
   ).join("");
 }
+
+/* ---------- tabs ---------- */
+let anatomyTab = true;
+function setTab(t) {
+  anatomyTab = t === "anatomy";
+  anatEl.hidden = !anatomyTab; physBody.hidden = anatomyTab;
+  document.getElementById("tabBtnAnatomy").classList.toggle("on", anatomyTab);
+  document.getElementById("tabBtnPhysics").classList.toggle("on", !anatomyTab);
+}
+document.getElementById("tabBtnAnatomy").onclick = () => setTab("anatomy");
+document.getElementById("tabBtnPhysics").onclick = () => setTab("physics");
 function frame(root) {
   root.updateMatrixWorld(true);
   const box = new Box3().setFromObject(root);
@@ -305,8 +413,9 @@ addEventListener("resize", resize);
 buildList(); select("ahu"); resize();
 function tick() {
   requestAnimationFrame(tick);
-  if (spinOn) for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += 0.3;
+  if (spinOn) for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += 0.18;
   if (auto) { az += 0.0035; updateCam(); }
+  updateExplode();
   renderer.render(scene, camera);
 }
 tick();
