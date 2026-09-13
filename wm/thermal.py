@@ -177,10 +177,17 @@ class Room(Component):
         C: float = 3.0e5,             # effective thermal capacitance [J/K]
         UA: float = 30.0,             # envelope conductance [W/K]
         solar_aperture: float = 0.5,  # effective solar-collecting area [m^2]
+        hidden_gain: float = 0.0,     # unmodelled constant load [W] (see learn.py)
         T0: float = 21.0,             # initial temperature [C]
     ):
-        super().__init__(name, C=C, UA=UA, solar_aperture=solar_aperture)
+        super().__init__(
+            name, C=C, UA=UA, solar_aperture=solar_aperture, hidden_gain=hidden_gain
+        )
         self.state["T"] = T0
+        # Optional learned residual: a callable(ctx) -> extra power [W], where
+        # ctx = {T, T_out, irr, Q_int, Q_hvac}. This is the f_learned slot; the
+        # pure-physics model leaves it None. See wm/learn.py.
+        self.residual = None
 
     def outputs(self, t: float, bus: Bus) -> dict[str, float]:
         # publish the individual heat flows so they can be traced / inspected
@@ -191,10 +198,17 @@ class Room(Component):
         q_int = bus.get(f"{self.name}.Q_int", 0.0)
         irr = bus.get(f"{self.name}.solar", 0.0)
         q_solar = self.p("solar_aperture") * irr
-        q_total = q_env + q_hvac + q_int + q_solar
+        q_hidden = self.p("hidden_gain")  # 0 for the model; nonzero in "reality"
+        q_res = 0.0
+        if self.residual is not None:
+            q_res = self.residual(
+                {"T": T, "T_out": t_out, "irr": irr, "Q_int": q_int, "Q_hvac": q_hvac}
+            )
+        q_total = q_env + q_hvac + q_int + q_solar + q_hidden + q_res
         return {
             "Q_env": q_env,
             "Q_solar": q_solar,
+            "Q_learned": q_res,
             "Q_total": q_total,
         }
 
