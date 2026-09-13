@@ -150,15 +150,27 @@ function place(key, x, z, scale, name, role) {
   return grp;
 }
 
-const P = {
-  hall: (() => { const h = buildHall(); h.position.set(15, 0, 0); scene.add(h); return h; })(),
-  ahu:  place("ahu",  3.5, 5, 0.9, "Air Handling Unit", "Cools & delivers supply air to the hall."),
-  tes:  place("tes", -3, -5, 0.85, "Thermal Storage Tank", "Stores chilled water made overnight to shave the peak."),
-  chil: place("chiller", -11, 1, 0.85, "Water-Cooled Chiller", "Makes chilled water; the plant's core."),
-  tower:place("tower", -18.5, 5.5, 0.8, "Cooling Tower", "Rejects the chiller's condenser heat to the desert air."),
-  pumpC:place("pump", -15, 4.5, 0.6, "Condenser Pump", "Circulates water between chiller and tower."),
-  pumpH:place("pump", -7, 4.5, 0.6, "Chilled-Water Pump", "Pushes chilled water to the storage tank & air handler."),
-};
+const P = {};
+P.hall = buildHall(); P.hall.position.set(16, 0, 0); scene.add(P.hall);
+// cooling towers (back row)
+place("tower", -26, -6, 0.7, "Cooling Tower 1", "Rejects condenser heat to the desert air.");
+place("tower", -26, 3, 0.7, "Cooling Tower 2", "Rejects condenser heat to the desert air.");
+// chillers
+place("chiller", -18, -6, 0.72, "Chiller 1", "Makes chilled water; the plant's core.");
+place("chiller", -18, 3, 0.72, "Chiller 2", "Second chiller — lead/lag with Chiller 1.");
+// pump bank — condenser + chilled water (now sized to read)
+place("pump", -11, -7, 0.85, "Condenser Pump 1", "Circulates water: Chiller 1 ↔ Tower 1.");
+place("pump", -11, -4.4, 0.85, "Condenser Pump 2", "Circulates water: Chiller 2 ↔ Tower 2.");
+place("pump", -11, 2, 0.85, "Chilled-Water Pump 1", "Pushes chilled water to the mosque.");
+place("pump", -11, 4.6, 0.85, "Chilled-Water Pump 2", "Standby chilled-water pump.");
+// plate heat exchanger, thermal storage, expansion tank
+place("plateHX", -6, -8, 0.8, "Plate Heat Exchanger", "Isolates the mosque loop from the plant.");
+place("tes", -4, -3, 0.78, "Thermal Storage Tank", "Cold made overnight, discharged at the peak.");
+place("expansiontank", -5.5, 7, 0.7, "Expansion Tank", "Absorbs thermal expansion, holds loop pressure.");
+// air handler near the hall + a valve and a sensor on the line
+place("ahu", 4, 6, 0.9, "Air Handling Unit", "Cools & delivers supply air to the hall.");
+place("valve", -1, 2, 0.6, "Control Valve", "Modulates chilled water to the air handler.");
+place("sensor", 9.5, 4, 0.5, "Supply Sensor & DDC", "Measures supply-air temperature for the controller.");
 
 /* ---------- pipes ---------- */
 const chilledMat = new MeshStandardMaterial({ color: 0x2a5f74, metalness: 0.6, roughness: 0.35, emissive: new Color(0x0a3a4a), emissiveIntensity: 0.6 });
@@ -182,16 +194,18 @@ function pipe(a, b, r, mat, flow) {
     flows.push({ a, b, spheres, dir: flow.dir ?? 1 });
   }
 }
-// condenser loop: tower -> pumpC -> chiller -> tower
-pipe([-18.5, 0.7, 5.5], [-15, 0.7, 4.5], 0.28, condMat);
-pipe([-15, 0.7, 4.5], [-11, 0.7, 1], 0.28, condMat);
-pipe([-11, 0.7, 2.2], [-18.5, 0.7, 6.6], 0.24, condMat);
-// chilled loop: chiller -> tes -> pumpH -> ahu (flowing, cyan)
-pipe([-11, 0.7, 0], [-3, 0.7, -5], 0.26, chilledMat, { mat: flowMat });
-pipe([-3, 0.7, -5], [-7, 0.7, 4.5], 0.26, chilledMat, { mat: flowMat });
-pipe([-7, 0.7, 4.5], [3.5, 0.7, 5], 0.26, chilledMat, { mat: flowMat });
-// supply air duct: ahu -> hall (big galvanized)
-pipe([3.5, 1.6, 5], [11, 1.6, 2], 0.6, airMat, { mat: flowMatW });
+// condenser loops: towers <-> condenser pumps <-> chillers
+pipe([-26, , -6], [-11, , -7], 0.26, condMat); pipe([-11, , -7], [-18, , -6], 0.26, condMat);
+pipe([-26, , 3], [-11, , -4.4], 0.26, condMat); pipe([-11, , -4.4], [-18, , 3], 0.26, condMat);
+// chilled-water loop (flowing, cyan): chillers -> plate HX -> pumps -> valve -> AHU, with storage tap
+pipe([-18, , -6], [-6, , -8], 0.24, chilledMat, { mat: flowMat });
+pipe([-18, , 3], [-6, , -8], 0.24, chilledMat, { mat: flowMat });
+pipe([-6, , -8], [-11, , 2], 0.24, chilledMat, { mat: flowMat });
+pipe([-4, , -3], [-11, , 2], 0.22, chilledMat, { mat: flowMat });   // storage tap
+pipe([-11, , 2], [-1, , 2], 0.24, chilledMat, { mat: flowMat });
+pipe([-1, , 2], [4, , 6], 0.24, chilledMat, { mat: flowMat });
+// supply-air duct (flowing): AHU -> hall
+pipe([4, 1.7, 6], [12, 1.7, 1], 0.55, airMat, { mat: flowMatW });
 
 /* ---------- Mecca single-zone physics (RK4) ---------- */
 function simulate(hours = 24, dt = 60) {
@@ -271,7 +285,7 @@ playBtn.onclick = () => (playing ? pause() : play());
 el("scrub").oninput = e => { pause(); idx = +e.target.value; updateHUD(); };
 
 /* ---------- orbit ---------- */
-let az = 0.8, pol = 1.05, rad = 42; const target = new Vector3(-2, 4, 0);
+let az = 0.78, pol = 1.02, rad = 58; const target = new Vector3(-6, 4, 1);
 function updateCam() { camera.position.set(target.x + rad * Math.sin(pol) * Math.sin(az), target.y + rad * Math.cos(pol), target.z + rad * Math.sin(pol) * Math.cos(az)); camera.lookAt(target); }
 let drag = false, moved = false, px = 0, py = 0;
 renderer.domElement.addEventListener("pointerdown", e => { drag = true; moved = false; px = e.clientX; py = e.clientY; });
