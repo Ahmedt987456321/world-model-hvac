@@ -63,6 +63,26 @@ Overnight the room drifts down; internal gains and the afternoon sun push it up
 through the occupied hours; it peaks mid-afternoon and settles. Every number is a
 consequence of the physics, not a script.
 
+## The visual canvas (Stage 2)
+
+`canvas/index.html` is a single, dependency-free page that **is** the simulator,
+not a picture of one. Drag Room / Air handler / Weather / Occupancy boxes, wire
+their ports together, edit each component's physics in the inspector, and press
+**Play** to watch 24 hours unfold — the room temperature animating on every node
+and on the chart, with live comfort, energy and peak-power readouts.
+
+```bash
+# open it locally
+python -m http.server -d canvas 8000   # then visit http://localhost:8000
+# ...or just double-click canvas/index.html
+```
+
+It runs a **JavaScript port of the exact `wm/` engine** — same RK4 integrator,
+same equations, same constants. The port is verified to reproduce the Python
+results to the digit (thermostat: 100% comfort, 8.62 kWh; fixed 16°C: 28%, 6.41
+kWh; fixed 14°C: 13%, 6.50 kWh). The canvas and the library are one physics, two
+front ends.
+
 ## The physics
 
 A single-zone lumped-capacitance (RC) room:
@@ -121,7 +141,7 @@ possible.
 | Stage | What | Status |
 |---|---|---|
 | 1 | Room + HVAC + weather simulator | ✅ this repo |
-| 2 | Visual drag-and-drop world builder over the same engine | next |
+| 2 | Visual drag-and-drop world builder over the same engine | ✅ `canvas/` |
 | 3 | Learn model error from real sensor data (hybrid physics + learned residual) | research |
 | 4 | Plan / control a real building safely | long horizon |
 
