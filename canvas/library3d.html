@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HVAC 3D Library</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0f141a; overflow: hidden;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif; color: #e7eef5; }
+  .app { display: grid; grid-template-columns: 232px 1fr; height: 100vh; height: 100dvh; }
+  /* left library */
+  aside { background: #141c25; border-right: 1px solid #22303d; display: flex; flex-direction: column; min-height: 0; }
+  .brand { padding: 14px 16px 10px; border-bottom: 1px solid #22303d; }
+  .brand h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  .brand p { margin: 3px 0 0; font-size: 11px; color: #8fa2b4; font-family: "IBM Plex Mono", monospace; }
+  .list { overflow-y: auto; padding: 8px; flex: 1; }
+  .cat { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #6a7d8f;
+    padding: 12px 8px 5px; }
+  .item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: transparent; border: 1px solid transparent; border-radius: 9px; color: #cdd8e2;
+    padding: 8px 10px; font: inherit; font-size: 13px; cursor: pointer; }
+  .item:hover { background: #1b2733; }
+  .item.on { background: #1d2b39; border-color: #2fbccb; color: #fff; }
+  .item .dot { width: 8px; height: 8px; border-radius: 50%; background: #3a4c5d; flex: none; }
+  .item.on .dot { background: #2fbccb; }
+  .item .soon { margin-left: auto; font-size: 9px; color: #6a7d8f; font-family: "IBM Plex Mono", monospace; }
+  /* viewer */
+  .viewer { position: relative; }
+  #stage { position: absolute; inset: 0; }
+  canvas { display: block; }
+  .label { position: absolute; left: 20px; top: 18px; z-index: 5; }
+  .label h2 { margin: 0; font-size: 20px; font-weight: 600; }
+  .label p { margin: 4px 0 0; font-size: 12.5px; color: #9fb0c0; max-width: 380px; line-height: 1.5; }
+  .hud { position: absolute; right: 18px; top: 18px; z-index: 5; display: flex; gap: 6px; }
+  .hud button { font: inherit; font-size: 12px; color: #cdd8e2; background: rgba(20,28,37,0.7);
+    border: 1px solid #2a3947; border-radius: 8px; padding: 6px 10px; cursor: pointer; backdrop-filter: blur(6px); }
+  .hud button.on { border-color: #2fbccb; color: #7fe6f0; }
+  .foot { position: absolute; left: 20px; bottom: 16px; z-index: 5; font-size: 11px; color: #6a7d8f;
+    font-family: "IBM Plex Mono", monospace; }
+  .count { position: absolute; right: 18px; bottom: 16px; z-index: 5; font-size: 11px; color: #6a7d8f;
+    font-family: "IBM Plex Mono", monospace; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/jsm/" } }
+</script>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand">
+      <h1>HVAC 3D Library</h1>
+      <p>world-model · equipment</p>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+  <div class="viewer">
+    <div id="stage"></div>
+    <div class="label"><h2 id="mName">—</h2><p id="mDesc"></p></div>
+    <div class="hud">
+      <button id="btnSpin" class="on">Spin</button>
+      <button id="btnAuto" class="on">Auto-rotate</button>
+    </div>
+    <div class="foot">drag to orbit · scroll to zoom</div>
+    <div class="count" id="count"></div>
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+const {
+  Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3,
+  BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry, SphereGeometry, ConeGeometry,
+  MeshStandardMaterial, ShadowMaterial, DirectionalLight, HemisphereLight, AmbientLight,
+  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils,
+} = THREE;
+
+/* ---------- renderer / scene ---------- */
+const stage = document.getElementById("stage");
+const renderer = new WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.1;
+renderer.outputColorSpace = SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+const scene = new Scene(); scene.background = new Color(0x0f141a);
+const camera = new PerspectiveCamera(42, 1, 0.1, 500);
+const pmrem = new PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+scene.add(new HemisphereLight(0xe6eef7, 0x2c333b, 0.35));
+scene.add(new AmbientLight(0xffffff, 0.1));
+const key = new DirectionalLight(0xffffff, 2.2);
+key.position.set(9, 15, 10); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1; key.shadow.camera.far = 90;
+key.shadow.camera.left = -22; key.shadow.camera.right = 22; key.shadow.camera.top = 22; key.shadow.camera.bottom = -22;
+key.shadow.bias = -0.0003; scene.add(key);
+const rim = new DirectionalLight(0xbcd2ff, 0.5); rim.position.set(-10, 7, -9); scene.add(rim);
+
+const shadow = new Mesh(new PlaneGeometry(200, 200), new ShadowMaterial({ opacity: 0.3 }));
+shadow.rotation.x = -Math.PI / 2; shadow.receiveShadow = true; scene.add(shadow);
+const floor = new Mesh(new PlaneGeometry(200, 200), new MeshStandardMaterial({ color: 0x161c24, roughness: 0.95, metalness: 0.05 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.002; floor.receiveShadow = true; scene.add(floor);
+
+/* ---------- materials ---------- */
+const M = {
+  panel:  new MeshStandardMaterial({ color: 0xcfd6dc, metalness: 0.7, roughness: 0.4 }),
+  dark:   new MeshStandardMaterial({ color: 0x8d97a1, metalness: 0.7, roughness: 0.45 }),
+  galv:   new MeshStandardMaterial({ color: 0xc9d0d6, metalness: 0.9, roughness: 0.3 }),
+  trim:   new MeshStandardMaterial({ color: 0x38404a, metalness: 0.6, roughness: 0.5 }),
+  bright: new MeshStandardMaterial({ color: 0xe7ebf0, metalness: 0.85, roughness: 0.25 }),
+  copper: new MeshStandardMaterial({ color: 0xc07b46, metalness: 0.85, roughness: 0.35 }),
+  blue:   new MeshStandardMaterial({ color: 0x2f6bb0, metalness: 0.55, roughness: 0.4 }),
+  green:  new MeshStandardMaterial({ color: 0x3f7d5a, metalness: 0.4, roughness: 0.55 }),
+  yellow: new MeshStandardMaterial({ color: 0xd6a43a, metalness: 0.5, roughness: 0.45 }),
+};
+function add(geo, mat, parent, x = 0, y = 0, z = 0) {
+  const m = new Mesh(geo, mat); m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+}
+// a rotating fan wheel (backward-curved), returns the spinning group
+function fanWheel(parent, cx, cy, cz, r, mat) {
+  const w = new Group(); w.position.set(cx, cy, cz); parent.add(w);
+  add(new TorusGeometry(r, r * 0.08, 10, 32), mat, w).rotation.y = Math.PI / 2;
+  add(new TorusGeometry(r, r * 0.08, 10, 32), mat, w, -r * 0.5, 0, 0).rotation.y = Math.PI / 2;
+  add(new CylinderGeometry(r * 0.22, r * 0.22, r * 0.7, 18), M.dark, w).rotation.z = Math.PI / 2;
+  const n = 16;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    const b = add(new BoxGeometry(r * 0.55, r * 0.34, 0.04), mat, w, -r * 0.25, Math.cos(a) * r * 0.78, Math.sin(a) * r * 0.78);
+    b.rotation.x = a; b.rotation.z = 0.6;
+  }
+  return w;
+}
+
+/* =========================================================================
+   MODEL BUILDERS — one per HVAC machine. Each returns { group, spin:[] }.
+   Built procedurally in real 3D (no downloads). More get added over time.
+   ========================================================================= */
+const BUILD = {};
+
+BUILD.ahu = () => {
+  const g = new Group(); const Y = 3.4;
+  add(new BoxGeometry(4.8, 2.0, 2.0), M.panel, g, 0, Y, 0);
+  for (const sx of [-2.4, 2.4]) for (const sz of [-1, 1]) add(new BoxGeometry(0.1, 2.02, 0.1), M.trim, g, sx, Y, sz);
+  for (const sy of [-1, 1]) for (const sz of [-1, 1]) add(new BoxGeometry(4.82, 0.1, 0.1), M.trim, g, 0, Y + sy, sz);
+  for (const sz of [-0.82, 0.82]) add(new BoxGeometry(4.9, 0.16, 0.18), M.trim, g, 0, Y - 1.05, sz);
+  for (let i = -3; i <= 3; i++) add(new BoxGeometry(0.06, 0.16, 1.5), M.dark, g, -2.41, Y + i * 0.24, 0).rotation.z = 0.55;
+  const door = (cx, w, view) => {
+    add(new BoxGeometry(w, 1.72, 0.05), M.panel, g, cx, Y, 1.01);
+    add(new BoxGeometry(w + 0.06, 1.82, 0.03), M.trim, g, cx, Y, 0.99);
+    add(new BoxGeometry(0.06, 0.44, 0.1), M.bright, g, cx + w / 2 - 0.14, Y - 0.1, 1.05);
+    if (view) add(new BoxGeometry(0.5, 0.5, 0.04), M.copper, g, cx, Y + 0.35, 1.04);
+  };
+  door(-1.35, 1.15, true); door(0.15, 1.35, false);
+  add(new TorusGeometry(0.74, 0.13, 14, 40), M.dark, g, 2.42, Y, 0).rotation.y = Math.PI / 2;
+  const spin = fanWheel(g, 2.4, Y, 0, 0.6, M.bright);
+  const manifold = (cx) => { const hy = Y - 1.18;
+    add(new CylinderGeometry(0.28, 0.28, 2, 24), M.galv, g, cx, hy, 0).rotation.x = Math.PI / 2;
+    for (const dz of [-0.7, 0, 0.7]) { const len = hy - 0.55;
+      add(new CylinderGeometry(0.22, 0.22, len, 20), M.galv, g, cx, hy - len / 2, dz);
+      add(new CylinderGeometry(0.34, 0.22, 0.3, 20), M.galv, g, cx, 0.2, dz); } };
+  manifold(-1.4); manifold(1.4);
+  return { group: g, spin: [spin] };
+};
+
+BUILD.chiller = () => {
+  const g = new Group(); const Y = 1.9;
+  add(new BoxGeometry(6.4, 0.4, 2.4), M.trim, g, 0, 0.2, 0);          // skid
+  // two horizontal shells (evaporator + condenser)
+  add(new CylinderGeometry(0.85, 0.85, 5.4, 28), M.panel, g, 0, Y + 0.9, 0.55).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(0.95, 0.95, 5.4, 28), M.panel, g, 0, Y - 0.15, -0.4).rotation.z = Math.PI / 2;
+  for (const x of [-2.7, 2.7]) { // dished heads
+    add(new SphereGeometry(0.85, 20, 12, 0, Math.PI), M.dark, g, x, Y + 0.9, 0.55).rotation.z = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+    add(new SphereGeometry(0.95, 20, 12, 0, Math.PI), M.dark, g, x, Y - 0.15, -0.4).rotation.z = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+  }
+  // compressor (semi-hermetic) on top + motor
+  add(new CylinderGeometry(0.6, 0.6, 1.6, 24), M.dark, g, -1.1, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(0.5, 0.5, 1.2, 20), M.blue, g, 0.5, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
+  add(new BoxGeometry(0.3, 0.5, 0.5), M.trim, g, 1.4, Y + 2.1, 0.2);
+  // refrigerant piping
+  add(new CylinderGeometry(0.16, 0.16, 1.4, 16), M.copper, g, -1.1, Y + 1.6, 0.55);
+  add(new CylinderGeometry(0.16, 0.16, 1.2, 16), M.copper, g, 1.1, Y + 1.55, 0.2);
+  // control panel
+  add(new BoxGeometry(0.3, 1.4, 1.1), M.trim, g, 3.15, Y + 0.6, 0.4);
+  add(new BoxGeometry(0.05, 0.6, 0.8), M.blue, g, 3.32, Y + 0.8, 0.4);
+  // water nozzles
+  for (const z of [1.4, -1.3]) add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.dark, g, -2.2, Y + (z > 0 ? 0.9 : -0.15), z).rotation.x = Math.PI / 2;
+  return { group: g, spin: [] };
+};
+
+BUILD.tower = () => {
+  const g = new Group();
+  add(new BoxGeometry(4.6, 0.7, 4.6), M.trim, g, 0, 0.35, 0);                 // basin
+  add(new BoxGeometry(4.2, 3.4, 4.2), M.green, g, 0, 2.5, 0);                 // body
+  // louvers on all 4 sides
+  for (let i = 0; i < 5; i++) {
+    for (const s of [1, -1]) {
+      add(new BoxGeometry(4.0, 0.14, 0.1), M.dark, g, 0, 1.4 + i * 0.42, s * 2.11).rotation.x = 0.5;
+      add(new BoxGeometry(0.1, 0.14, 4.0), M.dark, g, s * 2.11, 1.4 + i * 0.42, 0).rotation.z = 0.5;
+    }
+  }
+  // fan shroud (cylinder) + wheel on top
+  add(new CylinderGeometry(1.7, 1.7, 0.7, 32, 1, true), M.dark, g, 0, 4.5, 0);
+  const spin = fanWheel(g, 0, 4.7, 0, 1.5, M.panel);
+  spin.rotation.z = Math.PI / 2; // lay flat (axis vertical)
+  // legs
+  for (const sx of [-1.9, 1.9]) for (const sz of [-1.9, 1.9]) add(new BoxGeometry(0.16, 0.7, 0.16), M.trim, g, sx, 0.35, sz);
+  return { group: g, spin: [spin] };
+};
+
+BUILD.pump = () => {
+  const g = new Group();
+  add(new BoxGeometry(3.4, 0.35, 1.5), M.yellow, g, 0, 0.18, 0);             // baseplate
+  // motor
+  add(new CylinderGeometry(0.6, 0.6, 2.0, 28), M.blue, g, 0.9, 1.1, 0).rotation.z = Math.PI / 2;
+  add(new BoxGeometry(0.6, 0.5, 0.9), M.blue, g, 0.9, 0.55, 0);              // motor foot
+  for (let i = 0; i < 14; i++) add(new BoxGeometry(0.04, 0.5, 0.04), M.dark, g, -0.05 + i * 0.14, 1.1, 0.62); // fins
+  // volute casing (snail)
+  add(new CylinderGeometry(0.85, 0.85, 0.7, 32), M.dark, g, -1.1, 1.05, 0).rotation.z = Math.PI / 2;
+  add(new TorusGeometry(0.6, 0.28, 16, 32), M.dark, g, -1.1, 1.05, 0).rotation.y = Math.PI / 2;
+  // suction (front) + discharge (top) flanges
+  add(new CylinderGeometry(0.4, 0.4, 0.5, 20), M.dark, g, -1.8, 1.05, 0).rotation.z = Math.PI / 2;
+  add(new CylinderGeometry(0.34, 0.34, 0.8, 20), M.dark, g, -1.1, 1.9, 0);
+  add(new CylinderGeometry(0.42, 0.42, 0.1, 20), M.bright, g, -1.1, 2.3, 0);
+  const spin = new Group(); spin.position.set(-1.3, 1.05, 0); g.add(spin);
+  for (let i = 0; i < 6; i++) add(new BoxGeometry(0.06, 0.44, 0.3), M.bright, spin, 0, Math.cos(i / 6 * Math.PI * 2) * 0.28, Math.sin(i / 6 * Math.PI * 2) * 0.28).rotation.x = i / 6 * Math.PI * 2;
+  return { group: g, spin: [spin] };
+};
+
+BUILD.vav = () => {
+  const g = new Group(); const Y = 1.6;
+  add(new BoxGeometry(2.6, 1.3, 1.3), M.galv, g, 0, Y, 0);                    // box
+  add(new CylinderGeometry(0.55, 0.55, 0.6, 24), M.galv, g, -1.5, Y, 0).rotation.z = Math.PI / 2; // inlet duct
+  add(new CylinderGeometry(0.58, 0.58, 0.12, 24), M.dark, g, -1.75, Y, 0).rotation.z = Math.PI / 2;
+  // actuator on top
+  add(new BoxGeometry(0.5, 0.4, 0.4), M.yellow, g, -0.5, Y + 0.85, 0);
+  add(new CylinderGeometry(0.06, 0.06, 0.5, 12), M.dark, g, -0.5, Y + 0.55, 0);
+  // reheat coil (finned) at discharge
+  for (let i = 0; i < 8; i++) add(new BoxGeometry(0.04, 1.0, 1.0), M.copper, g, 0.9 + i * 0.08, Y, 0);
+  add(new BoxGeometry(0.75, 1.2, 1.2), M.trim, g, 1.15, Y, 0);
+  for (const z of [0.45, -0.45]) add(new CylinderGeometry(0.1, 0.1, 0.5, 12), M.copper, g, 1.15, Y + 0.75, z);
+  // controller
+  add(new BoxGeometry(0.4, 0.5, 0.08), M.trim, g, 0.2, Y, 0.7);
+  return { group: g, spin: [] };
+};
+
+BUILD.fan = () => {
+  const g = new Group(); const Y = 1.9;
+  add(new BoxGeometry(0.3, 3.2, 3.2), M.trim, g, -1.2, Y, 0);                 // mounting wall
+  add(new TorusGeometry(1.3, 0.16, 16, 44), M.dark, g, -1.0, Y, 0).rotation.y = Math.PI / 2;
+  add(new CylinderGeometry(1.3, 1.3, 0.5, 44, 1, true), M.dark, g, -0.75, Y, 0).rotation.z = Math.PI / 2;
+  const spin = fanWheel(g, -0.7, Y, 0, 1.05, M.panel);
+  // motor on struts behind
+  add(new CylinderGeometry(0.4, 0.4, 1.0, 20), M.blue, g, 0.4, Y, 0).rotation.z = Math.PI / 2;
+  for (const a of [0, 2.1, 4.2]) add(new BoxGeometry(1.2, 0.08, 0.08), M.dark, g, -0.2, Y + Math.cos(a) * 1.1, Math.sin(a) * 1.1).rotation.x = a;
+  return { group: g, spin: [spin] };
+};
+
+/* ---------- catalog ---------- */
+const CATALOG = [
+  { cat: "Air side" },
+  { key: "ahu", name: "Air Handling Unit", desc: "Insulated cabinet: intake louvers, filter & coil sections, a centrifugal blower, and supply ducts." },
+  { key: "fan", name: "Centrifugal Fan", desc: "Backward-curved wheel in a housing, belt-driven by a motor — moves air through the system." },
+  { key: "vav", name: "VAV Terminal Box", desc: "Variable-air-volume box: a damper modulates flow, a reheat coil trims supply temperature per zone." },
+  { cat: "Cooling plant" },
+  { key: "chiller", name: "Water-Cooled Chiller", desc: "Evaporator & condenser shells, a compressor and refrigerant circuit — the heart of the district cooling plant." },
+  { key: "tower", name: "Cooling Tower", desc: "Induced-draft tower: an axial fan pulls air across louvers to reject condenser heat to atmosphere." },
+  { key: "pump", name: "Centrifugal Pump", desc: "Volute casing and impeller driven by a motor on a baseplate — circulates chilled and condenser water." },
+];
+
+/* soon-to-come, shown greyed */
+const SOON = ["Boiler", "Heat Pump", "Plate Heat Exchanger", "Thermal Storage Tank", "Damper", "Duct & Fittings", "Sensor", "Valve"];
+
+/* ---------- build the list ---------- */
+const listEl = document.getElementById("list");
+let current = null;
+function buildList() {
+  let html = "";
+  for (const row of CATALOG) {
+    if (row.cat) { html += `<div class="cat">${row.cat}</div>`; continue; }
+    html += `<button class="item" data-key="${row.key}"><span class="dot"></span>${row.name}</button>`;
+  }
+  html += `<div class="cat">Coming next</div>`;
+  for (const s of SOON) html += `<button class="item" disabled style="opacity:.5;cursor:default"><span class="dot"></span>${s}<span class="soon">soon</span></button>`;
+  listEl.innerHTML = html;
+  listEl.querySelectorAll(".item[data-key]").forEach((b) => b.addEventListener("click", () => select(b.dataset.key)));
+  document.getElementById("count").textContent = CATALOG.filter((r) => r.key).length + " models · " + SOON.length + " queued";
+}
+
+/* ---------- selection / framing ---------- */
+let modelGroup = null, spinners = [];
+function select(key) {
+  const row = CATALOG.find((r) => r.key === key); if (!row) return;
+  current = key;
+  listEl.querySelectorAll(".item").forEach((b) => b.classList.toggle("on", b.dataset.key === key));
+  document.getElementById("mName").textContent = row.name;
+  document.getElementById("mDesc").textContent = row.desc;
+  if (modelGroup) scene.remove(modelGroup);
+  const built = BUILD[key]();
+  modelGroup = built.group; spinners = built.spin || [];
+  scene.add(modelGroup);
+  frame(modelGroup);
+}
+function frame(root) {
+  root.updateMatrixWorld(true);
+  const box = new Box3().setFromObject(root);
+  const size = box.getSize(new Vector3()), c = box.getCenter(new Vector3());
+  target.set(0, size.y * 0.45, 0);
+  root.position.x -= c.x; root.position.z -= c.z; root.position.y -= box.min.y;
+  rad = Math.max(size.x, size.y, size.z) * 1.9; updateCam();
+}
+
+/* ---------- orbit ---------- */
+let az = 0.9, pol = 1.12, rad = 14, auto = true;
+const target = new Vector3(0, 2, 0);
+function updateCam() {
+  camera.position.set(target.x + rad * Math.sin(pol) * Math.sin(az), target.y + rad * Math.cos(pol), target.z + rad * Math.sin(pol) * Math.cos(az));
+  camera.lookAt(target);
+}
+let drag = false, px = 0, py = 0;
+renderer.domElement.addEventListener("pointerdown", (e) => { drag = true; auto = false; document.getElementById("btnAuto").classList.remove("on"); px = e.clientX; py = e.clientY; });
+addEventListener("pointerup", () => (drag = false));
+addEventListener("pointermove", (e) => { if (!drag) return; az -= (e.clientX - px) * 0.006; px = e.clientX; pol = MathUtils.clamp(pol - (e.clientY - py) * 0.006, 0.15, 1.5); py = e.clientY; updateCam(); });
+renderer.domElement.addEventListener("wheel", (e) => { e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 3, 80); updateCam(); }, { passive: false });
+
+let spinOn = true;
+document.getElementById("btnSpin").onclick = (e) => { spinOn = !spinOn; e.target.classList.toggle("on", spinOn); };
+document.getElementById("btnAuto").onclick = (e) => { auto = !auto; e.target.classList.toggle("on", auto); };
+
+/* ---------- resize / loop ---------- */
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  camera.aspect = w / h; camera.updateProjectionMatrix(); renderer.setSize(w, h);
+}
+addEventListener("resize", resize);
+
+buildList(); select("ahu"); resize();
+function tick() {
+  requestAnimationFrame(tick);
+  if (spinOn) for (const s of spinners) s.rotation.x += 0.3;
+  if (auto) { az += 0.0035; updateCam(); }
+  renderer.render(scene, camera);
+}
+tick();
+</script>
+</body>
+</html>
