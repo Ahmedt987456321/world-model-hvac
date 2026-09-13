@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Grand Mosque Cooling Plant</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1218;
+    font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif; color: #e7eef5; }
+  #stage { position: fixed; inset: 0; }
+  canvas { display: block; }
+  .hud { position: fixed; left: 16px; top: 16px; z-index: 10; width: 288px;
+    background: rgba(15,21,28,0.82); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px; padding: 14px 16px; backdrop-filter: blur(10px); }
+  .hud h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  .hud .sub { font-size: 11px; color: #8fa2b4; font-family: "IBM Plex Mono", monospace; margin-bottom: 12px; }
+  .clockrow { display: flex; align-items: baseline; gap: 8px; margin-bottom: 10px; font-family: "IBM Plex Mono", monospace; }
+  .clockrow .t { font-size: 22px; font-weight: 600; }
+  .clockrow .lab { font-size: 11px; color: #8fa2b4; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .stat { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 9px; padding: 7px 9px; }
+  .stat .k { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #7f8ea0; }
+  .stat .v { font-family: "IBM Plex Mono", monospace; font-size: 17px; font-weight: 600; margin-top: 1px; }
+  .stat .v small { font-size: 11px; color: #9fb0c0; font-weight: 500; }
+  canvas.chart { width: 100%; height: 78px; display: block; margin: 4px 0 2px; }
+  .legend { font-size: 10px; color: #8fa2b4; display: flex; gap: 10px; margin-bottom: 8px; }
+  .legend i { display: inline-block; width: 12px; height: 2.5px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
+  .ctrl { display: flex; gap: 8px; align-items: center; }
+  .ctrl button { flex: none; font: inherit; font-size: 13px; color: #062; background: #2fbccb; border: none;
+    border-radius: 8px; padding: 7px 14px; cursor: pointer; font-weight: 600; }
+  .ctrl input[type=range] { flex: 1; accent-color: #2fbccb; }
+  .pick { position: fixed; left: 50%; bottom: 20px; transform: translateX(-50%); z-index: 10;
+    background: rgba(15,21,28,0.85); border: 1px solid rgba(47,188,203,0.5); border-radius: 10px;
+    padding: 8px 16px; font-size: 13px; backdrop-filter: blur(8px); opacity: 0; transition: opacity 0.2s; }
+  .pick.show { opacity: 1; }
+  .pick b { color: #7fe6f0; }
+  .foot { position: fixed; right: 16px; bottom: 14px; z-index: 10; font-size: 11px; color: #6a7d8f; font-family: "IBM Plex Mono", monospace; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/jsm/" } }
+</script>
+</head>
+<body>
+<div id="stage"></div>
+<div class="hud">
+  <h1>Masjid al-Haram</h1>
+  <div class="sub">district cooling plant · Mecca</div>
+  <div class="clockrow"><span class="lab">day clock</span><span class="t" id="clock">00:00</span></div>
+  <div class="stats">
+    <div class="stat"><div class="k">Outdoor</div><div class="v" id="sOut">—<small>°C</small></div></div>
+    <div class="stat"><div class="k">Prayer hall</div><div class="v" id="sHall">—<small>°C</small></div></div>
+    <div class="stat"><div class="k">Cooling load</div><div class="v" id="sLoad">—<small> tons</small></div></div>
+    <div class="stat"><div class="k">Comfort</div><div class="v" id="sComf">—<small>%</small></div></div>
+  </div>
+  <canvas class="chart" id="chart"></canvas>
+  <div class="legend"><span><i style="background:#46c98a"></i>Hall</span><span><i style="background:#6f9bff"></i>Outdoor</span><span><i style="background:#f2a63c"></i>Supply air</span></div>
+  <div class="ctrl">
+    <button id="play">▶ Play</button>
+    <input type="range" id="scrub" min="0" max="100" value="0" />
+  </div>
+</div>
+<div class="pick" id="pick"></div>
+<div class="foot">drag to orbit · scroll to zoom · click a machine</div>
+
+<script type="module">
+import * as THREE from "three";
+import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+import { BUILD, M } from "./models3d.js";
+
+const {
+  Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3, Raycaster, Vector2, Quaternion,
+  BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry, SphereGeometry, ConeGeometry,
+  MeshStandardMaterial, ShadowMaterial, DirectionalLight, HemisphereLight, AmbientLight,
+  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils,
+} = THREE;
+
+/* ---------- renderer / scene ---------- */
+const stage = document.getElementById("stage");
+const renderer = new WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = PCFSoftShadowMap;
+renderer.toneMapping = ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = SRGBColorSpace;
+stage.appendChild(renderer.domElement);
+
+const scene = new Scene(); scene.background = new Color(0x0d1218);
+const camera = new PerspectiveCamera(45, 1, 0.1, 800);
+const pmrem = new PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+scene.add(new HemisphereLight(0xdfe8f2, 0x2a2f36, 0.5));
+scene.add(new AmbientLight(0xffffff, 0.12));
+const key = new DirectionalLight(0xfff2df, 2.6);
+key.position.set(18, 30, 16); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048);
+key.shadow.camera.near = 1; key.shadow.camera.far = 160;
+key.shadow.camera.left = -45; key.shadow.camera.right = 45; key.shadow.camera.top = 45; key.shadow.camera.bottom = -45;
+key.shadow.bias = -0.0003; scene.add(key);
+const rim = new DirectionalLight(0xbcd2ff, 0.5); rim.position.set(-16, 10, -14); scene.add(rim);
+
+const shadow = new Mesh(new PlaneGeometry(400, 400), new ShadowMaterial({ opacity: 0.28 }));
+shadow.rotation.x = -Math.PI / 2; shadow.receiveShadow = true; scene.add(shadow);
+const floor = new Mesh(new PlaneGeometry(400, 400), new MeshStandardMaterial({ color: 0x141b23, roughness: 0.96, metalness: 0.04 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.005; floor.receiveShadow = true; scene.add(floor);
+
+const add = (geo, mat, parent, x = 0, y = 0, z = 0) => {
+  const m = new Mesh(geo, mat); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m;
+};
+
+/* ---------- the stylised Grand Mosque prayer hall (the load) ---------- */
+function buildHall() {
+  const g = new Group();
+  const stone = new MeshStandardMaterial({ color: 0xdcc9a4, metalness: 0.04, roughness: 0.85 });
+  const stone2 = new MeshStandardMaterial({ color: 0xccbd97, metalness: 0.04, roughness: 0.9 });
+  const domeMat = new MeshStandardMaterial({ color: 0x2f7d5a, metalness: 0.3, roughness: 0.45 });
+  const gold = new MeshStandardMaterial({ color: 0xcaa53c, metalness: 0.75, roughness: 0.3 });
+  add(new BoxGeometry(15, 5.5, 11), stone, g, 0, 2.75, 0);
+  add(new BoxGeometry(15.4, 0.5, 11.4), stone2, g, 0, 5.7, 0);
+  for (let i = -3; i <= 3; i++) {                                 // front arcade
+    add(new BoxGeometry(0.7, 4.2, 0.7), stone2, g, i * 2.1, 2.1, 5.6);
+    add(new TorusGeometry(0.95, 0.28, 8, 18, Math.PI), stone2, g, i * 2.1 + 1.05, 4.1, 5.6);
+  }
+  add(new CylinderGeometry(3.2, 3.2, 1.4, 36), stone2, g, 0, 6.3, 0); // drum
+  add(new SphereGeometry(3.2, 36, 22, 0, Math.PI * 2, 0, Math.PI / 2), domeMat, g, 0, 7.0, 0); // dome
+  add(new SphereGeometry(0.35, 16, 12), gold, g, 0, 10.4, 0); add(new CylinderGeometry(0.1, 0.1, 1.2, 12), gold, g, 0, 10.9, 0);
+  for (const [x, z] of [[-7.2, 4.8], [7.2, 4.8], [-7.2, -4.8], [7.2, -4.8]]) { // minarets
+    add(new CylinderGeometry(0.5, 0.62, 10, 16), stone, g, x, 5, z);
+    add(new CylinderGeometry(0.72, 0.72, 0.7, 16), gold, g, x, 10.2, z);
+    add(new ConeGeometry(0.62, 1.7, 16), domeMat, g, x, 11.3, z);
+  }
+  g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  g.userData = { name: "Prayer Hall", role: "The conditioned zone — ~2,500 pilgrims under a 48 °C sky.", dome: domeMat };
+  return g;
+}
+
+/* ---------- place equipment from the shared model library ---------- */
+const spinners = [];
+function place(key, x, z, scale, name, role) {
+  const built = BUILD[key]();
+  const grp = built.group;
+  grp.scale.setScalar(scale);
+  grp.updateMatrixWorld(true);
+  const box = new Box3().setFromObject(grp);
+  const c = box.getCenter(new Vector3());
+  grp.position.set(x - c.x, -box.min.y, z - c.z);
+  grp.userData = { name, role };
+  scene.add(grp);
+  for (const s of (built.spin || [])) spinners.push(s);
+  return grp;
+}
+
+const P = {
+  hall: (() => { const h = buildHall(); h.position.set(15, 0, 0); scene.add(h); return h; })(),
+  ahu:  place("ahu",  3.5, 5, 0.9, "Air Handling Unit", "Cools & delivers supply air to the hall."),
+  tes:  place("tes", -3, -5, 0.85, "Thermal Storage Tank", "Stores chilled water made overnight to shave the peak."),
+  chil: place("chiller", -11, 1, 0.85, "Water-Cooled Chiller", "Makes chilled water; the plant's core."),
+  tower:place("tower", -18.5, 5.5, 0.8, "Cooling Tower", "Rejects the chiller's condenser heat to the desert air."),
+  pumpC:place("pump", -15, 4.5, 0.6, "Condenser Pump", "Circulates water between chiller and tower."),
+  pumpH:place("pump", -7, 4.5, 0.6, "Chilled-Water Pump", "Pushes chilled water to the storage tank & air handler."),
+};
+
+/* ---------- pipes ---------- */
+const chilledMat = new MeshStandardMaterial({ color: 0x2a5f74, metalness: 0.6, roughness: 0.35, emissive: new Color(0x0a3a4a), emissiveIntensity: 0.6 });
+const condMat    = new MeshStandardMaterial({ color: 0x3a4657, metalness: 0.6, roughness: 0.4 });
+const airMat     = new MeshStandardMaterial({ color: 0xc9d0d6, metalness: 0.85, roughness: 0.35 });
+const flowMat    = new MeshStandardMaterial({ color: 0x4fd6e3, emissive: new Color(0x2fbccb), emissiveIntensity: 1.2, metalness: 0.2, roughness: 0.3 });
+const flowMatW   = new MeshStandardMaterial({ color: 0xbcd2ff, emissive: new Color(0x6f9bff), emissiveIntensity: 0.9 });
+
+const flows = [];
+function pipe(a, b, r, mat, flow) {
+  a = new Vector3(a[0], a[1] ?? 0.7, a[2]); b = new Vector3(b[0], b[1] ?? 0.7, b[2]);
+  const dir = new Vector3().subVectors(b, a); const len = dir.length();
+  const cyl = add(new CylinderGeometry(r, r, len, 16), mat, scene);
+  cyl.position.copy(a).addScaledVector(dir, 0.5);
+  cyl.quaternion.setFromUnitVectors(new Vector3(0, 1, 0), dir.clone().normalize());
+  add(new SphereGeometry(r * 1.4, 14, 10), mat, scene, a.x, a.y, a.z);
+  add(new SphereGeometry(r * 1.4, 14, 10), mat, scene, b.x, b.y, b.z);
+  if (flow) {
+    const spheres = [];
+    for (let i = 0; i < 5; i++) spheres.push(add(new SphereGeometry(r * 0.8, 10, 8), flow.mat, scene));
+    flows.push({ a, b, spheres, dir: flow.dir ?? 1 });
+  }
+}
+// condenser loop: tower -> pumpC -> chiller -> tower
+pipe([-18.5, 0.7, 5.5], [-15, 0.7, 4.5], 0.28, condMat);
+pipe([-15, 0.7, 4.5], [-11, 0.7, 1], 0.28, condMat);
+pipe([-11, 0.7, 2.2], [-18.5, 0.7, 6.6], 0.24, condMat);
+// chilled loop: chiller -> tes -> pumpH -> ahu (flowing, cyan)
+pipe([-11, 0.7, 0], [-3, 0.7, -5], 0.26, chilledMat, { mat: flowMat });
+pipe([-3, 0.7, -5], [-7, 0.7, 4.5], 0.26, chilledMat, { mat: flowMat });
+pipe([-7, 0.7, 4.5], [3.5, 0.7, 5], 0.26, chilledMat, { mat: flowMat });
+// supply air duct: ahu -> hall (big galvanized)
+pipe([3.5, 1.6, 5], [11, 1.6, 2], 0.6, airMat, { mat: flowMatW });
+
+/* ---------- Mecca single-zone physics (RK4) ---------- */
+function simulate(hours = 24, dt = 60) {
+  const CP = 1005;
+  const W = { m: 40, sw: 8, pk: 15, sol: 950, sr: 5.5, ss: 18.5 };
+  const O = { n: 2500, gp: 80, arr: 3, lv: 23 };
+  const R = { C: 5e7, UA: 3000, ap: 50 };
+  const A = { mdot: 80, sp: 24, kp: 6, smin: 10, smax: 45 };
+  const hod = t => (((t % 86400) + 86400) % 86400) / 3600;
+  function env(t) {
+    const h = hod(t);
+    const Tout = W.m + W.sw * Math.cos(2 * Math.PI * (h - W.pk) / 24);
+    let irr = 0; if (h > W.sr && h < W.ss) irr = W.sol * Math.sin(Math.PI * (h - W.sr) / (W.ss - W.sr));
+    const Qint = (h >= O.arr && h < O.lv) ? O.n * O.gp : 0;
+    return { Tout, irr, Qint };
+  }
+  function d(T, t) {
+    const e = env(t);
+    let Ts = A.sp + A.kp * (A.sp - T); Ts = Math.max(A.smin, Math.min(A.smax, Ts));
+    const Qh = A.mdot * CP * (Ts - T);
+    return { dT: (R.UA * (e.Tout - T) + Qh + e.Qint + R.ap * e.irr) / R.C, Qh, Ts, Tout: e.Tout };
+  }
+  const tr = { t: [], Tout: [], Troom: [], Ts: [], tons: [] };
+  let T = 30, t = 0;
+  const rec = () => { const x = d(T, t); tr.t.push(t); tr.Tout.push(x.Tout); tr.Troom.push(T); tr.Ts.push(x.Ts); tr.tons.push(-x.Qh / 1000 / 3.517); };
+  rec();
+  const steps = Math.round(hours * 3600 / dt);
+  for (let s = 0; s < steps; s++) {
+    const k1 = d(T, t).dT, k2 = d(T + k1 * dt / 2, t + dt / 2).dT, k3 = d(T + k2 * dt / 2, t + dt / 2).dT, k4 = d(T + k3 * dt, t + dt).dT;
+    T += dt / 6 * (k1 + 2 * k2 + 2 * k3 + k4); t += dt; rec();
+  }
+  tr.peakTons = Math.max(...tr.tons);
+  return tr;
+}
+const trace = simulate();
+const N = trace.t.length;
+document.getElementById("scrub").max = N - 1;
+
+/* ---------- HUD chart ---------- */
+const chart = document.getElementById("chart");
+function drawChart(idx) {
+  const dpr = devicePixelRatio || 1, w = chart.clientWidth, h = chart.clientHeight;
+  chart.width = w * dpr; chart.height = h * dpr; const c = chart.getContext("2d"); c.setTransform(dpr, 0, 0, dpr, 0, 0);
+  c.clearRect(0, 0, w, h);
+  const all = trace.Tout.concat(trace.Troom, trace.Ts);
+  let lo = Math.floor(Math.min(...all) - 2), hi = Math.ceil(Math.max(...all) + 2);
+  const X = i => (i / (N - 1)) * w, Y = v => h - ((v - lo) / (hi - lo)) * h;
+  const line = (arr, col, wd) => { c.strokeStyle = col; c.lineWidth = wd; c.beginPath(); arr.forEach((v, i) => i ? c.lineTo(X(i), Y(v)) : c.moveTo(X(i), Y(v))); c.stroke(); };
+  // comfort band 22-26
+  c.fillStyle = "rgba(70,201,138,0.12)"; c.fillRect(0, Y(26), w, Y(22) - Y(26));
+  line(trace.Tout, "#6f9bff", 1.3); line(trace.Ts, "#f2a63c", 1.1); line(trace.Troom, "#46c98a", 2);
+  c.strokeStyle = "rgba(255,255,255,0.4)"; c.lineWidth = 1; c.beginPath(); c.moveTo(X(idx), 0); c.lineTo(X(idx), h); c.stroke();
+}
+
+/* ---------- playback + HUD ---------- */
+let idx = 0, playing = false, t0 = 0, startIdx = 0;
+const el = id => document.getElementById(id);
+function fmtClock(t) { const h = ((t % 86400) / 3600); const hh = Math.floor(h), mm = Math.floor((h - hh) * 60); return String(hh).padStart(2, "0") + ":" + String(mm).padStart(2, "0"); }
+function updateHUD() {
+  const Tr = trace.Troom[idx], To = trace.Tout[idx], tons = trace.tons[idx];
+  el("clock").textContent = fmtClock(trace.t[idx]);
+  el("sOut").innerHTML = To.toFixed(1) + "<small>°C</small>";
+  el("sHall").innerHTML = Tr.toFixed(1) + "<small>°C</small>";
+  el("sLoad").innerHTML = Math.round(tons) + "<small> tons</small>";
+  const comf = trace.Troom.slice(0, idx + 1).filter(v => v >= 22 && v <= 26).length / (idx + 1);
+  el("sComf").innerHTML = Math.round(comf * 100) + "<small>%</small>";
+  el("scrub").value = idx;
+  // hall dome tints with comfort (green good -> warm if it slips)
+  const good = Tr <= 26 ? 1 : 0; P.hall.userData.dome.emissive.setRGB(good ? 0 : 0.25, good ? 0.12 : 0.05, good ? 0.06 : 0);
+  P.hall.userData.dome.emissiveIntensity = 0.4;
+  drawChart(idx);
+}
+const playBtn = el("play");
+function play() { playing = true; playBtn.textContent = "❚❚ Pause"; if (idx >= N - 1) idx = 0; startIdx = idx; t0 = performance.now(); }
+function pause() { playing = false; playBtn.textContent = "▶ Play"; }
+playBtn.onclick = () => (playing ? pause() : play());
+el("scrub").oninput = e => { pause(); idx = +e.target.value; updateHUD(); };
+
+/* ---------- orbit ---------- */
+let az = 0.8, pol = 1.05, rad = 42; const target = new Vector3(-2, 4, 0);
+function updateCam() { camera.position.set(target.x + rad * Math.sin(pol) * Math.sin(az), target.y + rad * Math.cos(pol), target.z + rad * Math.sin(pol) * Math.cos(az)); camera.lookAt(target); }
+let drag = false, moved = false, px = 0, py = 0;
+renderer.domElement.addEventListener("pointerdown", e => { drag = true; moved = false; px = e.clientX; py = e.clientY; });
+addEventListener("pointerup", e => { drag = false; if (!moved) pick(e); });
+addEventListener("pointermove", e => { if (!drag) return; if (Math.abs(e.clientX - px) + Math.abs(e.clientY - py) > 4) moved = true; az -= (e.clientX - px) * 0.005; px = e.clientX; pol = MathUtils.clamp(pol - (e.clientY - py) * 0.005, 0.2, 1.4); py = e.clientY; updateCam(); });
+renderer.domElement.addEventListener("wheel", e => { e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 12, 120); updateCam(); }, { passive: false });
+
+/* ---------- click to identify a machine ---------- */
+const ray = new Raycaster(); const pickEl = el("pick");
+function pick(e) {
+  const m = new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(m, camera);
+  const hit = ray.intersectObjects(scene.children, true)[0];
+  let o = hit && hit.object;
+  while (o && !(o.userData && o.userData.name)) o = o.parent;
+  if (o) { pickEl.innerHTML = `<b>${o.userData.name}</b> — ${o.userData.role || ""}`; pickEl.classList.add("show"); }
+  else pickEl.classList.remove("show");
+}
+
+/* ---------- resize / loop ---------- */
+function resize() { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+addEventListener("resize", resize);
+resize(); updateCam(); updateHUD();
+
+const tmp = new Vector3();
+function tick(now) {
+  requestAnimationFrame(tick);
+  if (playing) {
+    const frac = Math.min(1, (now - t0) / 14000);       // 24 h over ~14 s
+    idx = Math.round(startIdx + frac * (N - 1 - startIdx));
+    if (frac >= 1) pause();
+    updateHUD();
+  }
+  const load = trace.tons[idx] / (trace.peakTons || 1); // 0..1 drives fans & flow
+  const sp = 0.05 + load * 0.5;
+  for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += sp;
+  for (const f of flows) {
+    for (let i = 0; i < f.spheres.length; i++) {
+      const t = (((now * 0.00018 * (0.3 + load) * f.dir) + i / f.spheres.length) % 1 + 1) % 1;
+      f.spheres[i].position.lerpVectors(f.a, f.b, t);
+    }
+  }
+  renderer.render(scene, camera);
+}
+requestAnimationFrame(tick);
+</script>
+</body>
+</html>
