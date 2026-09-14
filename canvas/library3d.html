@@ -90,6 +90,19 @@
     font-family: "IBM Plex Mono", monospace; font-size: 10px; display: grid; place-items: center; }
   .part.hi .idx { background: #2fbccb; color: #06222a; }
   .part .pf { font-size: 11px; color: #9fb0c0; line-height: 1.5; margin: 5px 0 0 25px; }
+  .part .nm { flex: 1; }
+  .part.group { border-color: #2b4a52; }
+  .part .drill { font-family: "IBM Plex Mono", monospace; font-size: 10px; color: #2fbccb;
+    background: #12242b; border: 1px solid #295a63; border-radius: 20px; padding: 1px 7px; margin-left: auto; }
+  .part.group:hover .drill, .part.group.hi .drill { background: #2fbccb; color: #06222a; }
+  .callout.group { border-style: dashed; }
+  .callout .cdrill { color: #7fe6f0; font-weight: 700; }
+  .crumb { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; font-size: 12px; }
+  .crumb button { font: inherit; font-size: 12px; color: #7fe6f0; background: #12242b;
+    border: 1px solid #295a63; border-radius: 7px; padding: 4px 10px; cursor: pointer; }
+  .crumb button:hover { background: #17303a; }
+  .crumb .sep { color: #4a5c6d; }
+  .crumb .cur { color: #eaf1f7; font-weight: 500; }
   /* floating part callouts over the 3D */
   #callouts { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
   .callout { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
@@ -246,7 +259,8 @@ function buildList() {
 }
 
 /* ---------- selection / framing ---------- */
-let modelGroup = null, spinners = [], curParts = [], expAmt = 0, hiPart = -1;
+let modelGroup = null, spinners = [], rootParts = [], activeParts = [], drilled = null, machineName = "";
+let expAmt = 0, hiPart = -1;
 const boxHelper = new BoxHelper(new THREE.Object3D(), 0x2fbccb);
 boxHelper.material.depthTest = false; boxHelper.material.transparent = true; boxHelper.visible = false;
 scene.add(boxHelper);
@@ -261,56 +275,100 @@ function select(key) {
   if (modelGroup) scene.remove(modelGroup);
   const build = ASSEMBLY[key] || BUILD[key];
   const built = build();
-  modelGroup = built.group; spinners = built.spin || []; curParts = built.parts || [];
+  modelGroup = built.group; spinners = built.spin || []; rootParts = built.parts || []; machineName = row.name;
   scene.add(modelGroup);
-  expAmt = 0; hiPart = -1; boxHelper.visible = false; inspecting = false;
-  computeLayout();
   frame(modelGroup);
-  renderAnatomy(key);
+  enterLevel(rootParts, null);
   renderPhysics(key);
 }
 
-/* ---------- ANATOMY tab: named parts, organised explode & inspect ---------- */
+/* ---------- ANATOMY tab: named parts, drill-down, organised explode & inspect ---------- */
 const anatEl = document.getElementById("tabAnatomy");
 const calloutEl = document.getElementById("callouts");
 let layoutMode = "lines", inspecting = false, baseRad = 14, cutRadius = 26, layoutRadius = 26;
 const baseTarget = new Vector3(0, 2, 0);
 const _lb = new Box3(), _lu = new Box3();
+const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+const isGroup = (p) => p && p.userData.children && p.userData.children.length;
 
-/* work out where each part sits when laid out in tidy, evenly-sized lines */
-function computeLayout() {
-  if (!curParts.length) return;
+/* enter a level: the machine's top parts (drilledPart=null) or one part's sub-parts */
+function enterLevel(parts, drilledPart) {
+  drilled = drilledPart;
+  activeParts = parts;
+  if (drilledPart) rootParts.forEach((p) => (p.visible = p === drilledPart));
+  else rootParts.forEach((p) => (p.visible = true));
+  // everything back to home before we measure / lay out
+  const rest = (arr) => arr.forEach((p) => { p.position.copy(p.userData.home); p.scale.set(1, 1, 1); });
+  rest(rootParts);
+  rootParts.forEach((p) => p.userData.children && rest(p.userData.children));
+  expAmt = 0; hiPart = -1; inspecting = false; boxHelper.visible = false;
+  computeLayout();
+  fitActive();
+  renderAnatomy();
+}
+function drillInto(i) {
+  const P = activeParts[i]; if (!P) return;
+  if (!drilled && isGroup(P)) enterLevel(P.userData.children, P);
+  else inspectPart(i);
+}
+function goBack() { if (drilled) enterLevel(rootParts, null); }
+
+/* camera framing on whatever set is currently active (world space) */
+function fitActive() {
+  if (!activeParts.length) return;
+  modelGroup.updateMatrixWorld(true);
   _lu.makeEmpty();
-  const info = curParts.map((p) => {
+  for (const p of activeParts) { _lb.setFromObject(p); _lu.union(_lb); }
+  const c = _lu.getCenter(new Vector3()), s = _lu.getSize(new Vector3());
+  baseTarget.copy(c);
+  baseRad = Math.max(s.x, s.y, s.z, 0.5) * 1.9; cutRadius = baseRad * 1.95;
+  fitCamera();
+}
+
+/* where each active part sits when laid out in tidy, evenly-sized lines (parent-local) */
+function computeLayout() {
+  if (!activeParts.length) return;
+  const parent = activeParts[0].parent;
+  parent.updateMatrixWorld(true);
+  const info = activeParts.map((p) => {
     p.position.copy(p.userData.home); p.scale.set(1, 1, 1); p.updateMatrixWorld(true);
-    _lb.setFromObject(p); _lu.union(_lb);
-    return { p, c: _lb.getCenter(new Vector3()), minY: _lb.min.y,
-      maxd: Math.max(_lb.max.x - _lb.min.x, _lb.max.y - _lb.min.y, _lb.max.z - _lb.min.z, 0.25) };
+    _lb.setFromObject(p);
+    const cL = parent.worldToLocal(_lb.getCenter(new Vector3()));
+    const minL = parent.worldToLocal(new Vector3(_lb.min.x, _lb.min.y, _lb.min.z));
+    const sz = _lb.getSize(new Vector3());
+    return { p, cL, minY: minL.y, maxd: Math.max(sz.x, sz.y, sz.z, 0.25) };
   });
-  const Cc = _lu.getCenter(new Vector3());
+  let minx = Infinity, maxx = -Infinity, minz = Infinity, maxz = -Infinity, baseline = Infinity;
+  for (const it of info) { minx = Math.min(minx, it.cL.x); maxx = Math.max(maxx, it.cL.x); minz = Math.min(minz, it.cL.z); maxz = Math.max(maxz, it.cL.z); baseline = Math.min(baseline, it.minY); }
+  const Ccx = (minx + maxx) / 2, Ccz = (minz + maxz) / 2;
   const n = info.length, cols = Math.ceil(Math.sqrt(n)), rows = Math.ceil(n / cols);
   const sizes = info.map((i) => i.maxd).slice().sort((a, b) => a - b);
-  const unit = sizes[Math.floor(sizes.length * 0.6)] || 1;      // common part size
+  const unit = sizes[Math.floor(sizes.length * 0.6)] || 1;
   const spacing = unit * 1.75;
-  const x0 = Cc.x - ((cols - 1) / 2) * spacing, z0 = Cc.z - ((rows - 1) / 2) * spacing;
+  const x0 = Ccx - ((cols - 1) / 2) * spacing, z0 = Ccz - ((rows - 1) / 2) * spacing;
   info.forEach((it, i) => {
     const r = Math.floor(i / cols), col = i % cols;
-    const S = Math.min(2.6, Math.max(0.45, unit / it.maxd));    // scale toward a common size
-    const home = it.p.userData.home, lc = it.c.clone().sub(home), lminy = it.minY - home.y;
+    const S = Math.min(2.6, Math.max(0.45, unit / it.maxd));
+    const home = it.p.userData.home, lc = it.cL.clone().sub(home), lminy = it.minY - home.y;
     it.p.userData.exScale = S;
-    it.p.userData.exPos = new Vector3(x0 + col * spacing - S * lc.x, -S * lminy, z0 + r * spacing - S * lc.z);
+    it.p.userData.exPos = new Vector3(x0 + col * spacing - S * lc.x, baseline - S * lminy, z0 + r * spacing - S * lc.z);
   });
   layoutRadius = Math.max(cols * spacing, rows * spacing) * 1.45 + unit * 3;
 }
-const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
 
 function renderAnatomy() {
   calloutEl.innerHTML = "";
-  if (!curParts.length) {
+  if (!activeParts.length) {
     anatEl.innerHTML = `<p class="no-phys">Detailed internal anatomy for this machine is being modelled next. Tap another machine and pull the <b>Explode</b> slider.</p>`;
     return;
   }
-  anatEl.innerHTML =
+  const crumb = drilled
+    ? `<div class="crumb"><button id="crumbBack">‹ ${machineName}</button><span class="sep">/</span><span class="cur">${drilled.userData.name}</span></div>`
+    : "";
+  const hint = drilled
+    ? `Sub-parts of ${drilled.userData.name}. Tap a part to inspect it · scroll to zoom · drag to orbit.`
+    : `Drag to lay the parts out in tidy lines. Tap a part to inspect it — a ▸ part opens into its own sub-parts.`;
+  anatEl.innerHTML = crumb +
     `<div class="exp">
        <div class="row"><span class="lab">Explode view</span><span class="vv" id="expVal">0%</span></div>
        <input type="range" id="expSlider" min="0" max="100" value="0">
@@ -319,28 +377,30 @@ function renderAnatomy() {
          <button id="btnCutaway" class="${layoutMode === "cutaway" ? "on" : ""}">Cutaway</button>
          <button id="btnReset">Reset view</button>
        </div>
-       <div class="hint">Drag to lay the parts out in tidy lines. Tap a part to zoom in and inspect it · scroll to zoom · drag to orbit.</div>
+       <div class="hint">${hint}</div>
      </div>
-     <div class="ph-sec">Parts · ${curParts.length}</div><div id="partList"></div>`;
+     <div class="ph-sec">${drilled ? "Sub-parts" : "Parts"} · ${activeParts.length}</div><div id="partList"></div>`;
   const listWrap = anatEl.querySelector("#partList");
-  curParts.forEach((p, i) => {
-    const d = document.createElement("div"); d.className = "part"; d.dataset.i = i;
-    d.innerHTML = `<div class="pn"><span class="idx">${i + 1}</span>${p.userData.name}</div><div class="pf">${p.userData.fn}</div>`;
+  activeParts.forEach((p, i) => {
+    const grp = isGroup(p) && !drilled;
+    const d = document.createElement("div"); d.className = "part" + (grp ? " group" : ""); d.dataset.i = i;
+    d.innerHTML = `<div class="pn"><span class="idx">${i + 1}</span><span class="nm">${p.userData.name}</span>${grp ? `<span class="drill">▸ ${p.userData.children.length}</span>` : ""}</div><div class="pf">${p.userData.fn}</div>`;
     d.addEventListener("mouseenter", () => highlight(i));
     d.addEventListener("mouseleave", () => { if (!inspecting) highlight(-1); });
-    d.addEventListener("click", () => inspectPart(i));
+    d.addEventListener("click", () => drillInto(i));
     listWrap.appendChild(d);
-    const c = document.createElement("div"); c.className = "callout"; c.dataset.i = i; c.hidden = true;
-    c.innerHTML = `<span class="cidx">${i + 1}</span>${p.userData.name}`;
+    const c = document.createElement("div"); c.className = "callout" + (grp ? " group" : ""); c.dataset.i = i; c.hidden = true;
+    c.innerHTML = `<span class="cidx">${i + 1}</span>${p.userData.name}${grp ? ` <span class="cdrill">▸</span>` : ""}`;
     c.addEventListener("mouseenter", () => highlight(i));
     c.addEventListener("mouseleave", () => { if (!inspecting) highlight(-1); });
-    c.addEventListener("click", () => inspectPart(i));
+    c.addEventListener("click", () => drillInto(i));
     calloutEl.appendChild(c);
   });
   anatEl.querySelector("#expSlider").addEventListener("input", (e) => setExplode(parseInt(e.target.value) / 100));
   anatEl.querySelector("#btnLines").onclick = () => setLayout("lines");
   anatEl.querySelector("#btnCutaway").onclick = () => setLayout("cutaway");
   anatEl.querySelector("#btnReset").onclick = () => resetView();
+  if (drilled) anatEl.querySelector("#crumbBack").onclick = () => goBack();
 }
 function setLayout(m) {
   layoutMode = m;
@@ -363,11 +423,11 @@ function fitCamera() {
 }
 function resetView() { inspecting = false; highlight(-1); fitCamera(); }
 function inspectPart(i) {
-  if (!curParts[i]) return;
+  if (!activeParts[i]) return;
   if (expAmt < 0.12) setExplode(0.6);
   highlight(i); inspecting = true;
   auto = false; document.getElementById("btnAuto").classList.remove("on");
-  _lb.setFromObject(curParts[i]);
+  _lb.setFromObject(activeParts[i]);
   _lb.getCenter(target);
   const s = _lb.getSize(new Vector3());
   rad = Math.max(s.x, s.y, s.z) * 2.7 + 0.6;
@@ -377,13 +437,13 @@ function highlight(i) {
   hiPart = i;
   anatEl.querySelectorAll(".part").forEach((el) => el.classList.toggle("hi", +el.dataset.i === i));
   calloutEl.querySelectorAll(".callout").forEach((el) => el.classList.toggle("hi", +el.dataset.i === i));
-  if (i >= 0 && curParts[i]) { boxHelper.setFromObject(curParts[i]); boxHelper.visible = true; }
+  if (i >= 0 && activeParts[i]) { boxHelper.setFromObject(activeParts[i]); boxHelper.visible = true; }
   else boxHelper.visible = false;
 }
 const _v = new Vector3(), _box = new Box3();
 function updateExplode() {
   const tt = smooth(expAmt);
-  for (const p of curParts) {
+  for (const p of activeParts) {
     const u = p.userData;
     if (layoutMode === "lines" && u.exPos) {
       p.position.lerpVectors(u.home, u.exPos, tt);
@@ -393,13 +453,13 @@ function updateExplode() {
       p.scale.setScalar(1);
     }
   }
-  if (hiPart >= 0 && curParts[hiPart]) boxHelper.setFromObject(curParts[hiPart]);
-  const show = expAmt > 0.02 && anatomyTab && physOn && curParts.length;
+  if (hiPart >= 0 && activeParts[hiPart]) boxHelper.setFromObject(activeParts[hiPart]);
+  const show = expAmt > 0.02 && anatomyTab && physOn && activeParts.length;
   const w = stage.clientWidth, h = stage.clientHeight, cs = calloutEl.children;
-  for (let i = 0; i < curParts.length; i++) {
+  for (let i = 0; i < activeParts.length; i++) {
     const el = cs[i]; if (!el) continue;
     if (!show) { el.hidden = true; continue; }
-    _box.setFromObject(curParts[i]); _box.getCenter(_v); _v.project(camera);
+    _box.setFromObject(activeParts[i]); _box.getCenter(_v); _v.project(camera);
     if (_v.z > 1 || _v.x < -1.05 || _v.x > 1.05 || _v.y < -1.05 || _v.y > 1.05) { el.hidden = true; continue; }
     el.hidden = false;
     el.style.left = ((_v.x * 0.5 + 0.5) * w) + "px";
