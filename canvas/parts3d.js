@@ -54,6 +54,14 @@ ASSEMBLY.ahu = () => {
       add(new BoxGeometry(0.12, 2.0, 1.9), M.trim, n, -2.5, Y, 0);
     });
 
+  part(g, parts, "Mixing damper & linkage",
+    "Opposed blades tied by a jackshaft linkage set the blend of fresh and recirculated air; an actuator drives them.",
+    [-2.0, 0, -3.4], (n) => {
+      for (let i = 0; i < 5; i++) add(new BoxGeometry(0.05, 0.34, 1.7), M.panel, n, -2.0, Y - 0.8 + i * 0.42, 0).rotation.z = (i % 2 ? 1 : -1) * 0.5;
+      add(new BoxGeometry(0.06, 2.0, 0.06), M.trim, n, -2.0, Y, 0.9);
+      add(new BoxGeometry(0.4, 0.4, 0.4), M.yellow, n, -2.0, Y - 1.1, 0.9);
+    });
+
   part(g, parts, "Filter bank",
     "Pleated media traps dust and particulate so downstream coils and the space stay clean.",
     [0, 0, 3.0], (n) => {
@@ -131,14 +139,37 @@ ASSEMBLY.chiller = () => {
       add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.green, n, -2.2, Y - 0.15, -1.3).rotation.x = Math.PI / 2;
     });
 
-  const comp = part(g, parts, "Compressor & motor",
-    "Draws low-pressure vapour from the evaporator and compresses it hot and high-pressure — the machine's engine.",
-    [-1.1, 2.6, 0], (n) => {
-      add(new CylinderGeometry(0.6, 0.6, 1.6, 24), M.dark, n, -1.1, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
-      const w = new Group(); w.position.set(0.5, Y + 2.1, 0.2); w.userData.spinAxis = "x"; n.add(w);
-      add(new CylinderGeometry(0.5, 0.5, 1.2, 20), M.blue, w).rotation.z = Math.PI / 2;
+  part(g, parts, "Compressor housing",
+    "The semi-hermetic casing that seals the motor and compression set inside the refrigerant atmosphere.",
+    [-0.3, 3.6, 0.2], (n) => {
+      add(new CylinderGeometry(0.62, 0.62, 2.6, 24), clear({ c: 0x8d97a1, m: 0.7, o: 0.5 }), n, -0.2, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
+      add(new CylinderGeometry(0.64, 0.64, 0.12, 24), M.dark, n, 1.15, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
+      add(new BoxGeometry(0.3, 0.5, 0.5), M.trim, n, 1.5, Y + 2.1, 0.2);
+    });
+
+  part(g, parts, "Rotor / scroll set",
+    "The moving compression element — as it turns it squeezes the refrigerant vapour up to high pressure.",
+    [-2.6, 2.6, 0.2], (n) => {
+      n.position.set(0.4, Y + 2.1, 0.2);
+      const w = new Group(); w.userData.spinAxis = "x"; n.add(w);
+      add(new CylinderGeometry(0.5, 0.5, 0.9, 20), M.bright, w).rotation.z = Math.PI / 2;
+      for (let i = 0; i < 3; i++) add(new TorusGeometry(0.34, 0.05, 8, 24, Math.PI * 1.6), M.dark, w, -0.2 + i * 0.2, 0, 0).rotation.y = Math.PI / 2;
       spin.push(w);
-      add(new BoxGeometry(0.3, 0.5, 0.5), M.trim, n, 1.4, Y + 2.1, 0.2);
+    });
+
+  part(g, parts, "Motor stator & windings",
+    "Copper windings in a laminated stator turn electricity into the torque that drives the rotor.",
+    [2.6, 2.6, 0.2], (n) => {
+      add(new CylinderGeometry(0.55, 0.55, 0.9, 24), M.dark, n, -1.0, Y + 2.1, 0.2).rotation.z = Math.PI / 2;
+      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2;
+        add(new CylinderGeometry(0.07, 0.07, 0.9, 8), M.copper, n, -1.0, Y + 2.1 + Math.cos(a) * 0.42, 0.2 + Math.sin(a) * 0.42).rotation.z = Math.PI / 2; }
+    });
+
+  part(g, parts, "Oil sump & pump",
+    "A reservoir of lubricant with a pump that keeps the bearings and rotor running on an oil film.",
+    [1.4, -0.6, 2.6], (n) => {
+      add(new BoxGeometry(1.2, 0.5, 0.7), M.trim, n, 0.2, Y + 1.5, 0.2);
+      add(new CylinderGeometry(0.12, 0.12, 0.4, 12), M.dark, n, -0.4, Y + 1.45, 0.2);
     });
 
   part(g, parts, "Refrigerant piping & expansion valve",
@@ -200,6 +231,18 @@ ASSEMBLY.tower = () => {
       for (let i = -1; i <= 1; i++) add(new CylinderGeometry(0.14, 0.14, 3.6, 16), M.blue, n, 0, 4.6, i * 1.2).rotation.x = Math.PI / 2;
     });
 
+  part(g, parts, "Drift eliminators",
+    "Zig-zag blades above the fill strip water droplets out of the leaving air so they fall back, not blow away.",
+    [0, 2.2, 0], (n) => { for (let i = 0; i < 6; i++) add(new BoxGeometry(3.6, 0.5, 0.08), M.panel, n, 0, 4.7, -1.5 + i * 0.6).rotation.x = 0.5; });
+
+  part(g, parts, "Gearbox & driveshaft",
+    "A right-angle gearbox and shaft let a motor at the side turn the big fan slowly and quietly.",
+    [3.4, 2.0, 0], (n) => {
+      add(new BoxGeometry(0.6, 0.6, 0.6), M.dark, n, 0, 5.3, 0);
+      add(new CylinderGeometry(0.1, 0.1, 2.0, 12), M.bright, n, 1.2, 5.3, 0).rotation.z = Math.PI / 2;
+      add(new CylinderGeometry(0.4, 0.4, 0.5, 20), M.blue, n, 2.3, 5.3, 0).rotation.z = Math.PI / 2;
+    });
+
   const fan = part(g, parts, "Induced-draught fan & motor",
     "An axial fan on the deck pulls air up through the fill, driving the evaporation that rejects the heat.",
     [0, 3.2, 0], (n) => {
@@ -255,6 +298,17 @@ ASSEMBLY.pump = () => {
       add(new TorusGeometry(0.64, 0.3, 16, 32), M.dark, n, -1.2, Y, 0).rotation.y = Math.PI / 2;
     });
 
+  part(g, parts, "Shaft & bearing housing",
+    "Carries the impeller on the motor shaft and locates it on bearings against thrust and radial load.",
+    [-1.2, 1.8, 0], (n) => {
+      add(new CylinderGeometry(0.16, 0.16, 0.9, 16), M.bright, n, -0.55, Y, 0).rotation.z = Math.PI / 2;
+      add(new CylinderGeometry(0.3, 0.3, 0.4, 20), M.dark, n, -0.55, Y, 0).rotation.z = Math.PI / 2;
+    });
+
+  part(g, parts, "Mechanical seal",
+    "Seals the rotating shaft where it enters the casing so water can't leak out along it.",
+    [-1.2, 0, 2.0], (n) => add(new CylinderGeometry(0.22, 0.22, 0.16, 20), M.yellow, n, -0.78, Y, 0).rotation.z = Math.PI / 2);
+
   part(g, parts, "Suction & discharge nozzles",
     "Water enters axially at the front (suction) and leaves under pressure from the top (discharge).",
     [-2.6, 1.4, 0], (n) => {
@@ -294,6 +348,13 @@ ASSEMBLY.fan = () => {
         const b = add(new BoxGeometry(0.58, 0.36, 0.04), M.panel, w, -0.25, Math.cos(a) * 0.82, Math.sin(a) * 0.82);
         b.rotation.x = a; b.rotation.z = 0.6; }
       spin.push(w);
+    });
+
+  part(g, parts, "Shaft & bearings",
+    "The wheel spins on this shaft, held by pillow-block bearings that carry the load.",
+    [0, 1.8, 0], (n) => {
+      add(new CylinderGeometry(0.1, 0.1, 1.7, 14), M.bright, n, 0.1, Y, 0).rotation.z = Math.PI / 2;
+      for (const x of [-0.4, 0.6]) add(new BoxGeometry(0.28, 0.42, 0.4), M.trim, n, x, Y - 0.25, 0);
     });
 
   part(g, parts, "Motor & belt drive",
@@ -341,9 +402,23 @@ ASSEMBLY.boiler = () => {
       add(new BoxGeometry(0.4, 0.9, 0.55), M.trim, n, -3.2, Y + 0.7, 0);
     });
 
+  part(g, parts, "Front tube sheet & smokebox",
+    "The drilled plate the fire tubes land in, and the smokebox that turns the gases into the next pass.",
+    [-3.4, 1.6, 0], (n) => {
+      add(new CylinderGeometry(1.32, 1.32, 0.2, 32), M.bright, n, -2.05, Y, 0).rotation.z = Math.PI / 2;
+      for (const sy of [0.5, -0.55]) for (const sz of [0.5, -0.5]) add(new CylinderGeometry(0.18, 0.18, 0.2, 12), M.dark, n, -2.05, Y + sy, sz).rotation.z = Math.PI / 2;
+    });
+
+  part(g, parts, "Safety relief valve",
+    "A spring valve that lifts to release pressure if the boiler ever exceeds its safe limit.",
+    [0, 3.0, 0.0], (n) => {
+      add(new CylinderGeometry(0.14, 0.14, 0.4, 14), M.bright, n, -0.9, Y + 1.5, 0);
+      add(new BoxGeometry(0.2, 0.2, 0.5), M.dark, n, -0.9, Y + 1.75, 0);
+    });
+
   part(g, parts, "Flue stack",
     "Vents the spent combustion gases safely up and out after they've given up their heat.",
-    [0, 3.0, 0], (n) => {
+    [0, 3.6, 0], (n) => {
       add(new CylinderGeometry(0.5, 0.5, 2.4, 24), M.dark, n, 1.5, Y + 2.2, 0);
       add(new CylinderGeometry(0.58, 0.58, 0.2, 24), M.dark, n, 1.5, Y + 3.4, 0);
     });
@@ -402,6 +477,13 @@ ASSEMBLY.heatpump = () => {
     [1.6, 1.4, 0], (n) => {
       add(new CylinderGeometry(0.16, 0.16, 0.8, 16), M.copper, n, 0.75, Y + 0.5, 0).rotation.z = Math.PI / 2;
       add(new BoxGeometry(0.3, 0.3, 0.3), M.yellow, n, 0.4, Y + 0.5, 0);
+    });
+
+  part(g, parts, "Accumulator",
+    "A suction-line vessel that holds back liquid refrigerant so only vapour reaches the compressor.",
+    [1.8, 0, 1.8], (n) => {
+      add(new CylinderGeometry(0.28, 0.28, 0.9, 20), M.bright, n, 0.2, Y - 0.2, 0.5);
+      add(new SphereGeometry(0.28, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.bright, n, 0.2, Y + 0.25, 0.5);
     });
 
   return { group: g, parts, spin };
