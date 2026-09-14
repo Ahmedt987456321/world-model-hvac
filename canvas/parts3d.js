@@ -27,6 +27,7 @@ function part(g, parts, name, fn, dir, build) {
   node.userData = { name, fn, dir: new Vector3(dir[0], dir[1], dir[2]) };
   build(node);
   node.userData.home = node.position.clone();
+  node.userData.homeRot = node.rotation.clone();
   g.add(node);
   parts.push(node);
   return node;
@@ -39,6 +40,7 @@ function group(g, parts, name, fn, dir, build) {
   node.userData = { name, fn, dir: new Vector3(dir[0], dir[1], dir[2]), children: [] };
   build(node, node.userData.children);
   node.userData.home = node.position.clone();
+  node.userData.homeRot = node.rotation.clone();
   g.add(node);
   parts.push(node);
   return node;

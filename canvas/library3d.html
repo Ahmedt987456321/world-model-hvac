@@ -32,14 +32,16 @@
   .label { position: absolute; left: 20px; top: 18px; z-index: 5; }
   .label h2 { margin: 0; font-size: 20px; font-weight: 600; }
   .label p { margin: 4px 0 0; font-size: 12.5px; color: #9fb0c0; max-width: 380px; line-height: 1.5; }
-  .hud { position: absolute; right: 18px; top: 18px; z-index: 5; display: flex; gap: 6px; }
+  .hud { position: absolute; right: 346px; top: 18px; z-index: 7; display: flex; gap: 6px; transition: right 0.2s; }
+  .hud.edge { right: 18px; }
   .hud button { font: inherit; font-size: 12px; color: #cdd8e2; background: rgba(20,28,37,0.7);
     border: 1px solid #2a3947; border-radius: 8px; padding: 6px 10px; cursor: pointer; backdrop-filter: blur(6px); }
   .hud button.on { border-color: #2fbccb; color: #7fe6f0; }
   .foot { position: absolute; left: 20px; bottom: 16px; z-index: 5; font-size: 11px; color: #6a7d8f;
     font-family: "IBM Plex Mono", monospace; }
-  .count { position: absolute; right: 18px; bottom: 16px; z-index: 5; font-size: 11px; color: #6a7d8f;
-    font-family: "IBM Plex Mono", monospace; }
+  .count { position: absolute; right: 346px; bottom: 16px; z-index: 7; font-size: 11px; color: #6a7d8f;
+    font-family: "IBM Plex Mono", monospace; transition: right 0.2s; }
+  .count.edge { right: 18px; }
   /* engineering-model panel */
   .phys { position: absolute; top: 0; right: 0; bottom: 0; width: 330px; z-index: 6;
     background: rgba(16,22,29,0.94); border-left: 1px solid #22303d; backdrop-filter: blur(8px);
@@ -103,6 +105,29 @@
   .crumb button:hover { background: #17303a; }
   .crumb .sep { color: #4a5c6d; }
   .crumb .cur { color: #eaf1f7; font-weight: 500; }
+  /* JARVIS-style part readout */
+  .detail { border: 1px solid #2fbccb; border-radius: 10px; padding: 12px 13px; margin-bottom: 13px;
+    background: linear-gradient(180deg, rgba(24,48,58,0.6), rgba(12,20,28,0.6)); position: relative; overflow: hidden; }
+  .detail::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px;
+    background: linear-gradient(90deg, transparent, #2fbccb, transparent); animation: scan 2.4s linear infinite; }
+  @keyframes scan { 0% { transform: translateY(0); opacity: 0.9; } 100% { transform: translateY(240px); opacity: 0; } }
+  .detail .dt-tag { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #2fbccb; font-family: "IBM Plex Mono", monospace; }
+  .detail h3 { margin: 3px 0 0; font-size: 16px; font-weight: 600; color: #eaffff; }
+  .detail .dt-fn { margin: 6px 0 0; font-size: 12px; color: #b9cbd6; line-height: 1.55; }
+  .detail .specs { margin: 11px 0 0; border-top: 1px solid #1d3742; padding-top: 9px; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; }
+  .detail .specs dt { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #6f93a0; font-family: "IBM Plex Mono", monospace; align-self: center; }
+  .detail .specs dd { margin: 0; font-size: 12px; color: #dcecf2; font-family: "IBM Plex Mono", monospace; }
+  .detail .acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+  .detail .acts button { font: inherit; font-size: 11px; color: #cdeef2; background: #0e2027;
+    border: 1px solid #295a63; border-radius: 7px; padding: 5px 10px; cursor: pointer; }
+  .detail .acts button:hover { background: #17303a; border-color: #2fbccb; }
+  .detail .acts button.on { background: #2fbccb; color: #06222a; border-color: #7fe6f0; }
+  .detail .acts button.drill { color: #7fe6f0; }
+  .detail .hintline { margin-top: 9px; font-size: 10px; color: #6f93a0; line-height: 1.4; }
+  .part.sel { border-color: #ffb547; background: #2a2410; }
+  .part.sel .idx { background: #ffb547; color: #2a1c00; }
+  .callout.sel { background: #ffb547; color: #241a00; border-color: #ffd694; }
+  .callout.sel .cidx { color: #6b4b00; }
   /* floating part callouts over the 3D */
   #callouts { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
   .callout { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
@@ -264,6 +289,9 @@ let expAmt = 0, hiPart = -1;
 const boxHelper = new BoxHelper(new THREE.Object3D(), 0x2fbccb);
 boxHelper.material.depthTest = false; boxHelper.material.transparent = true; boxHelper.visible = false;
 scene.add(boxHelper);
+const selBox = new BoxHelper(new THREE.Object3D(), 0xffb547);
+selBox.material.depthTest = false; selBox.material.transparent = true; selBox.visible = false;
+scene.add(selBox);
 
 function select(key) {
   const row = CATALOG.find((r) => r.key === key); if (!row) return;
@@ -302,6 +330,7 @@ function enterLevel(parts, drilledPart) {
   rest(rootParts);
   rootParts.forEach((p) => p.userData.children && rest(p.userData.children));
   expAmt = 0; hiPart = -1; inspecting = false; boxHelper.visible = false;
+  selPart = null; selBox.visible = false; isolateMode = false; selSpin = false;
   computeLayout();
   fitActive();
   renderAnatomy();
@@ -366,9 +395,9 @@ function renderAnatomy() {
     ? `<div class="crumb"><button id="crumbBack">‹ ${machineName}</button><span class="sep">/</span><span class="cur">${drilled.userData.name}</span></div>`
     : "";
   const hint = drilled
-    ? `Sub-parts of ${drilled.userData.name}. Tap a part to inspect it · scroll to zoom · drag to orbit.`
-    : `Drag to lay the parts out in tidy lines. Tap a part to inspect it — a ▸ part opens into its own sub-parts.`;
-  anatEl.innerHTML = crumb +
+    ? `Sub-parts of ${drilled.userData.name}. Click a part to analyse it · drag it to move · scroll to zoom.`
+    : `Click a part to analyse it · drag a part to move it · the ▸ chip opens sub-parts · drag empty space to orbit.`;
+  anatEl.innerHTML = crumb + `<div id="detailSlot"></div>` +
     `<div class="exp">
        <div class="row"><span class="lab">Explode view</span><span class="vv" id="expVal">0%</span></div>
        <input type="range" id="expSlider" min="0" max="100" value="0">
@@ -387,13 +416,15 @@ function renderAnatomy() {
     d.innerHTML = `<div class="pn"><span class="idx">${i + 1}</span><span class="nm">${p.userData.name}</span>${grp ? `<span class="drill">▸ ${p.userData.children.length}</span>` : ""}</div><div class="pf">${p.userData.fn}</div>`;
     d.addEventListener("mouseenter", () => highlight(i));
     d.addEventListener("mouseleave", () => { if (!inspecting) highlight(-1); });
-    d.addEventListener("click", () => drillInto(i));
+    d.addEventListener("click", () => selectPart(activeParts[i]));
+    const chip = d.querySelector(".drill");
+    if (chip) chip.addEventListener("click", (ev) => { ev.stopPropagation(); drillInto(i); });
     listWrap.appendChild(d);
     const c = document.createElement("div"); c.className = "callout" + (grp ? " group" : ""); c.dataset.i = i; c.hidden = true;
     c.innerHTML = `<span class="cidx">${i + 1}</span>${p.userData.name}${grp ? ` <span class="cdrill">▸</span>` : ""}`;
     c.addEventListener("mouseenter", () => highlight(i));
     c.addEventListener("mouseleave", () => { if (!inspecting) highlight(-1); });
-    c.addEventListener("click", () => drillInto(i));
+    c.addEventListener("click", () => selectPart(activeParts[i]));
     calloutEl.appendChild(c);
   });
   anatEl.querySelector("#expSlider").addEventListener("input", (e) => setExplode(parseInt(e.target.value) / 100));
@@ -445,6 +476,7 @@ function updateExplode() {
   const tt = smooth(expAmt);
   for (const p of activeParts) {
     const u = p.userData;
+    if (u.pinned || isolateMode) continue;   // manually moved / isolated parts hold their pose
     if (layoutMode === "lines" && u.exPos) {
       p.position.lerpVectors(u.home, u.exPos, tt);
       p.scale.setScalar(1 + (u.exScale - 1) * tt);
@@ -454,6 +486,7 @@ function updateExplode() {
     }
   }
   if (hiPart >= 0 && activeParts[hiPart]) boxHelper.setFromObject(activeParts[hiPart]);
+  if (selPart) selBox.setFromObject(selPart);
   const show = expAmt > 0.02 && anatomyTab && physOn && activeParts.length;
   const w = stage.clientWidth, h = stage.clientHeight, cs = calloutEl.children;
   for (let i = 0; i < activeParts.length; i++) {
@@ -465,6 +498,114 @@ function updateExplode() {
     el.style.left = ((_v.x * 0.5 + 0.5) * w) + "px";
     el.style.top = ((-_v.y * 0.5 + 0.5) * h) + "px";
   }
+}
+
+/* ---------- SELECT · MOVE · ISOLATE one part (the JARVIS bit) ---------- */
+let selPart = null, selSpin = false, isolateMode = false;
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+const MATNAMES = {
+  cfd6dc: "Galvanised sheet steel", c9d0d6: "Galvanised sheet steel", e7ebf0: "Bright / stainless steel",
+  "8d97a1": "Cast / painted steel", "38404a": "Structural steel frame", c07b46: "Copper",
+  "2f6bb0": "Painted steel (motor/body)", "3f7d5a": "Control board (PCB)", d6a43a: "Actuator housing",
+  bcc3ad: "Filter / fill media", ff7a2a: "Combustion gas", "10141b": "Selective solar absorber",
+  "1a2b4c": "Photovoltaic silicon",
+};
+function matName(node) {
+  const tally = {}; let transp = 0, total = 0;
+  node.traverse((o) => {
+    if (!o.isMesh || !o.material) return;
+    total++;
+    if (o.material.transparent && o.material.opacity < 0.85) transp++;
+    const hex = o.material.color ? o.material.color.getHexString() : "x";
+    tally[hex] = (tally[hex] || 0) + 1;
+  });
+  if (total && transp / total > 0.5) return "Insulated casing / glazing";
+  let best = null, n = -1;
+  for (const k in tally) if (tally[k] > n) { n = tally[k]; best = k; }
+  return MATNAMES[best] || "Steel / alloy";
+}
+function partDims(node) {
+  _box.setFromObject(node);
+  const s = _box.getSize(new Vector3());
+  const k = node.scale.x || 1;
+  return [s.x / k, s.y / k, s.z / k];
+}
+function selectPart(node) {
+  if (!node) return;
+  selPart = node;
+  const i = activeParts.indexOf(node);
+  anatEl.querySelectorAll(".part").forEach((el) => el.classList.toggle("sel", +el.dataset.i === i));
+  calloutEl.querySelectorAll(".callout").forEach((el) => el.classList.toggle("sel", +el.dataset.i === i));
+  selBox.setFromObject(node); selBox.visible = true;
+  renderDetail();
+}
+function deselect() {
+  selPart = null; selSpin = false; selBox.visible = false;
+  anatEl.querySelectorAll(".part.sel").forEach((el) => el.classList.remove("sel"));
+  calloutEl.querySelectorAll(".callout.sel").forEach((el) => el.classList.remove("sel"));
+  const slot = document.getElementById("detailSlot"); if (slot) slot.innerHTML = "";
+}
+function renderDetail() {
+  const slot = document.getElementById("detailSlot"); if (!slot) return;
+  if (!selPart) { slot.innerHTML = ""; return; }
+  const u = selPart.userData, i = activeParts.indexOf(selPart);
+  const [dx, dy, dz] = partDims(selPart);
+  const grp = isGroup(selPart) && !drilled;
+  const loc = machineName + (drilled ? " ▸ " + drilled.userData.name : "") + ` · part ${i + 1}/${activeParts.length}`;
+  slot.innerHTML =
+    `<div class="detail">
+       <div class="dt-tag">◈ Component analysis</div>
+       <h3>${u.name}</h3>
+       <div class="dt-fn">${u.fn}</div>
+       <dl class="specs">
+         <dt>Material</dt><dd>${matName(selPart)}</dd>
+         <dt>Envelope</dt><dd>${dx.toFixed(1)} × ${dy.toFixed(1)} × ${dz.toFixed(1)} m</dd>
+         <dt>Location</dt><dd>${loc}</dd>
+         ${grp ? `<dt>Contains</dt><dd>${selPart.userData.children.length} sub-parts</dd>` : ``}
+       </dl>
+       <div class="acts">
+         ${grp ? `<button class="drill" data-a="drill">Drill in ▸</button>` : ``}
+         <button data-a="isolate" class="${isolateMode ? "on" : ""}">${isolateMode ? "Exit isolate" : "Isolate"}</button>
+         <button data-a="spin" class="${selSpin ? "on" : ""}">Spin</button>
+         <button data-a="release">Release</button>
+         <button data-a="deselect">Deselect</button>
+       </div>
+       <div class="hintline">${isolateMode ? "Drag to rotate · scroll to zoom." : "Drag the part in the scene to move it. Isolate to view it alone."}</div>
+     </div>`;
+  slot.querySelectorAll(".acts button").forEach((b) => b.onclick = () => {
+    const a = b.dataset.a;
+    if (a === "drill") drillInto(i);
+    else if (a === "isolate") isolateSel();
+    else if (a === "spin") { selSpin = !selSpin; renderDetail(); }
+    else if (a === "release") releaseSel();
+    else if (a === "deselect") deselect();
+  });
+}
+function isolateSel() {
+  if (!selPart) return;
+  if (isolateMode) { exitIsolate(); return; }
+  isolateMode = true;
+  activeParts.forEach((p) => (p.visible = p === selPart));
+  _box.setFromObject(selPart); _box.getCenter(target); baseTarget.copy(target);
+  const s = _box.getSize(new Vector3());
+  rad = Math.max(s.x, s.y, s.z) * 2.5 + 0.4; baseRad = rad;
+  updateCam(); renderDetail();
+}
+function exitIsolate() {
+  isolateMode = false;
+  if (drilled) rootParts.forEach((p) => (p.visible = p === drilled));
+  else rootParts.forEach((p) => (p.visible = true));
+  activeParts.forEach((p) => (p.visible = true));
+  fitActive(); renderDetail();
+}
+function releaseSel() {
+  if (!selPart) return;
+  selPart.userData.pinned = false;
+  selPart.position.copy(selPart.userData.home);
+  if (selPart.userData.homeRot) selPart.rotation.copy(selPart.userData.homeRot);
+  selPart.scale.set(1, 1, 1);
+  selSpin = false; renderDetail();
 }
 
 /* ---------- PHYSICS tab: engineering model ---------- */
@@ -534,18 +675,63 @@ function updateCam() {
   camera.position.set(target.x + rad * Math.sin(pol) * Math.sin(az), target.y + rad * Math.cos(pol), target.z + rad * Math.sin(pol) * Math.cos(az));
   camera.lookAt(target);
 }
-let drag = false, px = 0, py = 0;
-renderer.domElement.addEventListener("pointerdown", (e) => { drag = true; auto = false; document.getElementById("btnAuto").classList.remove("on"); px = e.clientX; py = e.clientY; });
-addEventListener("pointerup", () => (drag = false));
-addEventListener("pointermove", (e) => { if (!drag) return; az -= (e.clientX - px) * 0.006; px = e.clientX; pol = MathUtils.clamp(pol - (e.clientY - py) * 0.006, 0.15, 1.5); py = e.clientY; updateCam(); });
-renderer.domElement.addEventListener("wheel", (e) => { e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 3, 80); updateCam(); }, { passive: false });
+let drag = false, px = 0, py = 0, moved = 0;
+let grabbed = null;
+const dragPlane = new THREE.Plane(), hitPt = new Vector3(), grabOff = new Vector3();
+function pointerNDC(e) { const r = renderer.domElement.getBoundingClientRect(); ndc.x = ((e.clientX - r.left) / r.width) * 2 - 1; ndc.y = -((e.clientY - r.top) / r.height) * 2 + 1; }
+function pickPart(e) {
+  pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+  const meshes = [];
+  for (const p of activeParts) { if (p.visible) p.traverse((o) => { if (o.isMesh) meshes.push(o); }); }
+  const hits = raycaster.intersectObjects(meshes, false);
+  if (!hits.length) return null;
+  let o = hits[0].object;
+  while (o && activeParts.indexOf(o) < 0) o = o.parent;
+  return o ? o : null;
+}
+renderer.domElement.addEventListener("pointerdown", (e) => {
+  px = e.clientX; py = e.clientY; moved = 0;
+  auto = false; document.getElementById("btnAuto").classList.remove("on");
+  const hit = isolateMode ? null : pickPart(e);
+  if (hit) {
+    grabbed = hit;
+    camera.getWorldDirection(dragPlane.normal);
+    _box.setFromObject(grabbed); const c = _box.getCenter(new Vector3());
+    dragPlane.setFromNormalAndCoplanarPoint(dragPlane.normal, c);
+    pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPt)) grabOff.copy(grabbed.position).sub(grabbed.parent.worldToLocal(hitPt.clone()));
+  } else { drag = true; }
+});
+addEventListener("pointerup", () => {
+  if (grabbed) { selectPart(grabbed); grabbed = null; drag = false; return; }
+  if (drag && moved < 5 && !isolateMode) deselect();
+  drag = false;
+});
+addEventListener("pointermove", (e) => {
+  moved += Math.abs(e.clientX - px) + Math.abs(e.clientY - py);
+  if (grabbed) {
+    pointerNDC(e); raycaster.setFromCamera(ndc, camera);
+    if (raycaster.ray.intersectPlane(dragPlane, hitPt)) { grabbed.position.copy(grabbed.parent.worldToLocal(hitPt.clone()).add(grabOff)); grabbed.userData.pinned = true; }
+    px = e.clientX; py = e.clientY; return;
+  }
+  if (!drag) return;
+  if (isolateMode && selPart) { selPart.rotation.y += (e.clientX - px) * 0.01; selPart.rotation.x += (e.clientY - py) * 0.01; px = e.clientX; py = e.clientY; return; }
+  az -= (e.clientX - px) * 0.006; px = e.clientX; pol = MathUtils.clamp(pol - (e.clientY - py) * 0.006, 0.15, 1.5); py = e.clientY; updateCam();
+});
+renderer.domElement.addEventListener("wheel", (e) => { e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 2, 80); updateCam(); }, { passive: false });
 
 let spinOn = true;
 document.getElementById("btnSpin").onclick = (e) => { spinOn = !spinOn; e.target.classList.toggle("on", spinOn); };
 document.getElementById("btnAuto").onclick = (e) => { auto = !auto; e.target.classList.toggle("on", auto); };
 const physEl = document.getElementById("phys");
 let physOn = true;
-document.getElementById("btnPhys").onclick = (e) => { physOn = !physOn; e.target.classList.toggle("on", physOn); physEl.classList.toggle("hidden", !physOn); resize(); };
+const hudEl = document.querySelector(".hud"), countEl = document.getElementById("count");
+document.getElementById("btnPhys").onclick = (e) => {
+  physOn = !physOn; e.target.classList.toggle("on", physOn);
+  physEl.classList.toggle("hidden", !physOn);
+  hudEl.classList.toggle("edge", !physOn); countEl.classList.toggle("edge", !physOn);
+  resize();
+};
 
 /* ---------- resize / loop ---------- */
 function resize() {
@@ -562,7 +748,8 @@ buildList(); select("ahu"); resize();
 function tick() {
   requestAnimationFrame(tick);
   if (spinOn) for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += 0.18;
-  if (auto) { az += 0.0035; updateCam(); }
+  if (selSpin && selPart) selPart.rotation.y += 0.02;
+  if (auto && !isolateMode) { az += 0.0035; updateCam(); }
   updateExplode();
   renderer.render(scene, camera);
 }
