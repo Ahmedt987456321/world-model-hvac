@@ -250,25 +250,28 @@ ASSEMBLY.tower = () => {
     "Zig-zag blades above the fill strip water droplets out of the leaving air so they fall back, not blow away.",
     [0, 2.2, 0], (n) => { for (let i = 0; i < 6; i++) add(new BoxGeometry(3.6, 0.5, 0.08), M.panel, n, 0, 4.7, -1.5 + i * 0.6).rotation.x = 0.5; });
 
-  part(g, parts, "Gearbox & driveshaft",
-    "A right-angle gearbox and shaft let a motor at the side turn the big fan slowly and quietly.",
-    [3.4, 2.0, 0], (n) => {
-      add(new BoxGeometry(0.6, 0.6, 0.6), M.dark, n, 0, 5.3, 0);
-      add(new CylinderGeometry(0.1, 0.1, 2.0, 12), M.bright, n, 1.2, 5.3, 0).rotation.z = Math.PI / 2;
-      add(new CylinderGeometry(0.4, 0.4, 0.5, 20), M.blue, n, 2.3, 5.3, 0).rotation.z = Math.PI / 2;
-    });
-
-  const fan = part(g, parts, "Induced-draught fan & motor",
-    "An axial fan on the deck pulls air up through the fill, driving the evaporation that rejects the heat.",
-    [0, 3.2, 0], (n) => {
-      n.position.set(0, 5.9, 0);
-      add(new CylinderGeometry(1.6, 1.95, 1.15, 36, 1, true), M.panel, n, 0, 0.1, 0);
-      const w = new Group(); w.userData.spinAxis = "y"; n.add(w);
-      add(new CylinderGeometry(0.26, 0.26, 0.34, 18), M.dark, w);
-      for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
-        const bl = add(new BoxGeometry(1.5, 0.05, 0.58), M.dark, w, Math.cos(a) * 0.85, 0, Math.sin(a) * 0.85);
-        bl.rotation.y = -a; bl.rotation.x = 0.38; }
-      spin.push(w);
+  group(g, parts, "Fan drive",
+    "The induced-draught fan and the gearbox and motor that turn it. Drill in for each.",
+    [0, 3.2, 0], (n, subs) => {
+      part(n, subs, "Gearbox & driveshaft",
+        "A right-angle gearbox and shaft let a motor at the side turn the big fan slowly and quietly.",
+        [3.4, 0, 0], (m) => {
+          add(new BoxGeometry(0.6, 0.6, 0.6), M.dark, m, 0, 5.3, 0);
+          add(new CylinderGeometry(0.1, 0.1, 2.0, 12), M.bright, m, 1.2, 5.3, 0).rotation.z = Math.PI / 2;
+          add(new CylinderGeometry(0.4, 0.4, 0.5, 20), M.blue, m, 2.3, 5.3, 0).rotation.z = Math.PI / 2;
+        });
+      part(n, subs, "Induced-draught fan",
+        "An axial fan on the deck pulls air up through the fill, driving the evaporation that rejects the heat.",
+        [0, 2.2, 0], (m) => {
+          m.position.set(0, 5.9, 0);
+          add(new CylinderGeometry(1.6, 1.95, 1.15, 36, 1, true), M.panel, m, 0, 0.1, 0);
+          const w = new Group(); w.userData.spinAxis = "y"; m.add(w);
+          add(new CylinderGeometry(0.26, 0.26, 0.34, 18), M.dark, w);
+          for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
+            const bl = add(new BoxGeometry(1.5, 0.05, 0.58), M.dark, w, Math.cos(a) * 0.85, 0, Math.sin(a) * 0.85);
+            bl.rotation.y = -a; bl.rotation.x = 0.38; }
+          spin.push(w);
+        });
     });
 
   return { group: g, parts, spin };
@@ -411,16 +414,24 @@ ASSEMBLY.boiler = () => {
       for (const sy of [0.5, -0.55]) for (const sz of [0.5, -0.5]) add(new CylinderGeometry(0.16, 0.16, 4.0, 12), M.dark, n, 0, Y + sy, sz).rotation.z = Math.PI / 2;
     });
 
-  const burner = part(g, parts, "Burner & blower",
-    "Mixes fuel with forced air and fires it into the furnace; the blower supplies the combustion air.",
-    [-3.6, 0, 0], (n) => {
-      add(new CylinderGeometry(0.5, 0.5, 1.0, 24), M.blue, n, -2.95, Y - 0.2, 0).rotation.z = Math.PI / 2;
-      const w = new Group(); w.position.set(-3.45, Y - 0.2, 0); w.userData.spinAxis = "x"; n.add(w);
-      add(new CylinderGeometry(0.72, 0.72, 0.7, 24), M.blue, w).rotation.z = Math.PI / 2;
-      for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2;
-        add(new BoxGeometry(0.1, 0.5, 0.16), M.bright, w, 0, Math.cos(a) * 0.4, Math.sin(a) * 0.4).rotation.x = a; }
-      spin.push(w);
-      add(new BoxGeometry(0.4, 0.9, 0.55), M.trim, n, -3.2, Y + 0.7, 0);
+  group(g, parts, "Burner & blower",
+    "Mixes fuel with forced air and fires it into the furnace. Drill in for its parts.",
+    [-3.6, 0, 0], (n, subs) => {
+      part(n, subs, "Forced-draught blower",
+        "A fan that supplies the combustion air the burner needs to fire cleanly.",
+        [-2.0, 0, 0], (m) => {
+          const w = new Group(); w.position.set(-3.45, Y - 0.2, 0); w.userData.spinAxis = "x"; m.add(w);
+          add(new CylinderGeometry(0.72, 0.72, 0.7, 24), M.blue, w).rotation.z = Math.PI / 2;
+          for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2;
+            add(new BoxGeometry(0.1, 0.5, 0.16), M.bright, w, 0, Math.cos(a) * 0.4, Math.sin(a) * 0.4).rotation.x = a; }
+          spin.push(w);
+        });
+      part(n, subs, "Fuel gun & blast tube",
+        "Sprays and mixes the fuel and projects the flame into the furnace throat.",
+        [0, -1.6, 0], (m) => add(new CylinderGeometry(0.5, 0.5, 1.0, 24), M.blue, m, -2.95, Y - 0.2, 0).rotation.z = Math.PI / 2);
+      part(n, subs, "Flame-safeguard control",
+        "Proves the flame and sequences ignition, shutting the fuel off safely if it fails.",
+        [0, 1.8, 0], (m) => add(new BoxGeometry(0.4, 0.9, 0.55), M.trim, m, -3.2, Y + 0.7, 0));
     });
 
   part(g, parts, "Front tube sheet & smokebox",
@@ -484,27 +495,29 @@ ASSEMBLY.heatpump = () => {
       spin.push(w);
     });
 
-  const comp = part(g, parts, "Compressor",
-    "Compresses the refrigerant vapour, driving the heat-pump cycle that moves heat against its natural direction.",
-    [1.6, -1.2, 0], (n) => {
-      add(new CylinderGeometry(0.42, 0.42, 1.0, 24), M.dark, n, 0.75, Y - 0.6, 0);
-      const w = new Group(); w.position.set(0.75, Y - 0.6, 0); w.userData.spinAxis = "y"; n.add(w);
-      add(new CylinderGeometry(0.2, 0.2, 0.3, 12), M.blue, w);
-      spin.push(w);
-    });
-
-  part(g, parts, "Reversing valve & expansion valve",
-    "The reversing valve swaps heating and cooling; the expansion valve meters refrigerant into the coil.",
-    [1.6, 1.4, 0], (n) => {
-      add(new CylinderGeometry(0.16, 0.16, 0.8, 16), M.copper, n, 0.75, Y + 0.5, 0).rotation.z = Math.PI / 2;
-      add(new BoxGeometry(0.3, 0.3, 0.3), M.yellow, n, 0.4, Y + 0.5, 0);
-    });
-
-  part(g, parts, "Accumulator",
-    "A suction-line vessel that holds back liquid refrigerant so only vapour reaches the compressor.",
-    [1.8, 0, 1.8], (n) => {
-      add(new CylinderGeometry(0.28, 0.28, 0.9, 20), M.bright, n, 0.2, Y - 0.2, 0.5);
-      add(new SphereGeometry(0.28, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.bright, n, 0.2, Y + 0.25, 0.5);
+  group(g, parts, "Refrigerant circuit",
+    "The sealed loop that moves heat: compressor, valves and accumulator. Drill in for each.",
+    [1.9, 0.4, 1.4], (n, subs) => {
+      part(n, subs, "Compressor",
+        "Compresses the refrigerant vapour, driving the heat-pump cycle that moves heat against its natural direction.",
+        [0, -1.6, 0], (m) => {
+          add(new CylinderGeometry(0.42, 0.42, 1.0, 24), M.dark, m, 0.75, Y - 0.6, 0);
+          const w = new Group(); w.position.set(0.75, Y - 0.6, 0); w.userData.spinAxis = "y"; m.add(w);
+          add(new CylinderGeometry(0.2, 0.2, 0.3, 12), M.blue, w);
+          spin.push(w);
+        });
+      part(n, subs, "Reversing valve & expansion valve",
+        "The reversing valve swaps heating and cooling; the expansion valve meters refrigerant into the coil.",
+        [0, 1.6, 0], (m) => {
+          add(new CylinderGeometry(0.16, 0.16, 0.8, 16), M.copper, m, 0.75, Y + 0.5, 0).rotation.z = Math.PI / 2;
+          add(new BoxGeometry(0.3, 0.3, 0.3), M.yellow, m, 0.4, Y + 0.5, 0);
+        });
+      part(n, subs, "Accumulator",
+        "A suction-line vessel that holds back liquid refrigerant so only vapour reaches the compressor.",
+        [1.8, 0, 0], (m) => {
+          add(new CylinderGeometry(0.28, 0.28, 0.9, 20), M.bright, m, 0.2, Y - 0.2, 0.5);
+          add(new SphereGeometry(0.28, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), M.bright, m, 0.2, Y + 0.25, 0.5);
+        });
     });
 
   return { group: g, parts, spin };
@@ -573,24 +586,27 @@ ASSEMBLY.aircooled = () => {
     "The painted sheet-metal body that ties the coils, fans and compressors into one weatherproof unit.",
     [0, 0, 3.4], (n) => add(new BoxGeometry(8.6, 1.9, 2.6), clear({}), n, 0, Y, 0));
 
-  part(g, parts, "Condenser coils (V-bank)",
-    "Micro-channel coils in a V reject the refrigerant's heat straight to the outdoor air — no water needed.",
-    [0, 1.7, 0], (n) => {
-      for (const s of [1, -1]) for (let i = 0; i < 10; i++)
-        add(new BoxGeometry(0.72, 1.7, 0.03), M.dark, n, -3.6 + i * 0.8, Y, s * 1.45).rotation.y = s * 0.32;
-    });
-
-  const fanp = part(g, parts, "Condenser fans",
-    "A row of up-blast axial fans pulls air across the coils and drives it out of the top.",
-    [0, 3.4, 0], (n) => {
-      for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) {
-        add(new TorusGeometry(0.72, 0.07, 12, 34), M.trim, n, x, Y + 1.0, 0).rotation.x = Math.PI / 2;
-        const w = new Group(); w.position.set(x, Y + 1.05, 0); w.userData.spinAxis = "y"; n.add(w);
-        add(new CylinderGeometry(0.12, 0.12, 0.24, 14), M.dark, w);
-        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
-          add(new BoxGeometry(0.6, 0.04, 0.24), M.dark, w, Math.cos(a) * 0.36, 0, Math.sin(a) * 0.36).rotation.y = -a; }
-        spin.push(w);
-      }
+  group(g, parts, "Condenser section",
+    "Rejects the heat straight to the outdoor air. Drill in for the V-coils and the fan row.",
+    [0, 2.4, 0], (n, subs) => {
+      part(n, subs, "Condenser coils (V-bank)",
+        "Micro-channel coils in a V reject the refrigerant's heat straight to the outdoor air — no water needed.",
+        [0, 0, 2.6], (m) => {
+          for (const s of [1, -1]) for (let i = 0; i < 10; i++)
+            add(new BoxGeometry(0.72, 1.7, 0.03), M.dark, m, -3.6 + i * 0.8, Y, s * 1.45).rotation.y = s * 0.32;
+        });
+      part(n, subs, "Condenser fans",
+        "A row of up-blast axial fans pulls air across the coils and drives it out of the top.",
+        [0, 2.2, 0], (m) => {
+          for (const x of [-3.2, -1.6, 0, 1.6, 3.2]) {
+            add(new TorusGeometry(0.72, 0.07, 12, 34), M.trim, m, x, Y + 1.0, 0).rotation.x = Math.PI / 2;
+            const w = new Group(); w.position.set(x, Y + 1.05, 0); w.userData.spinAxis = "y"; m.add(w);
+            add(new CylinderGeometry(0.12, 0.12, 0.24, 14), M.dark, w);
+            for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
+              add(new BoxGeometry(0.6, 0.04, 0.24), M.dark, w, Math.cos(a) * 0.36, 0, Math.sin(a) * 0.36).rotation.y = -a; }
+            spin.push(w);
+          }
+        });
     });
 
   part(g, parts, "Compressors & controls",
@@ -670,18 +686,26 @@ ASSEMBLY.rtu = () => {
       add(new BoxGeometry(6.84, 0.12, 3.24), M.trim, n, 0, Y + 1.2, 0);
     });
 
-  const fanp = part(g, parts, "Condenser coil & fans",
-    "Up-blast fans pull outdoor air through the condenser coil to reject the heat the unit collects inside.",
-    [3.0, 2.4, 0], (n) => {
-      for (const x of [1.4, 3.0]) {
-        add(new TorusGeometry(0.95, 0.08, 12, 40), M.trim, n, x, Y + 1.25, 0).rotation.x = Math.PI / 2;
-        const w = new Group(); w.position.set(x, Y + 1.35, 0); w.userData.spinAxis = "y"; n.add(w);
-        add(new CylinderGeometry(0.14, 0.14, 0.24, 14), M.dark, w);
-        for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
-          add(new BoxGeometry(0.8, 0.04, 0.3), M.dark, w, Math.cos(a) * 0.48, 0, Math.sin(a) * 0.48).rotation.y = -a; }
-        spin.push(w);
-      }
-      for (const s of [1, -1]) for (let i = 0; i < 10; i++) add(new BoxGeometry(3.2, 0.02, 0.05), M.dark, n, 2.2, Y - 0.9 + i * 0.2, s * 1.61);
+  group(g, parts, "Condenser coil & fans",
+    "Rejects the heat the unit collects indoors. Drill in for the fans and the coil.",
+    [3.0, 2.4, 0], (n, subs) => {
+      part(n, subs, "Condenser fans",
+        "Up-blast axial fans that pull outdoor air up through the condenser coil.",
+        [0, 2.2, 0], (m) => {
+          for (const x of [1.4, 3.0]) {
+            add(new TorusGeometry(0.95, 0.08, 12, 40), M.trim, m, x, Y + 1.25, 0).rotation.x = Math.PI / 2;
+            const w = new Group(); w.position.set(x, Y + 1.35, 0); w.userData.spinAxis = "y"; m.add(w);
+            add(new CylinderGeometry(0.14, 0.14, 0.24, 14), M.dark, w);
+            for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2;
+              add(new BoxGeometry(0.8, 0.04, 0.3), M.dark, w, Math.cos(a) * 0.48, 0, Math.sin(a) * 0.48).rotation.y = -a; }
+            spin.push(w);
+          }
+        });
+      part(n, subs, "Condenser coil",
+        "The finned coil where hot high-pressure refrigerant gives up its heat to the passing air.",
+        [0, 0, 2.4], (m) => {
+          for (const s of [1, -1]) for (let i = 0; i < 10; i++) add(new BoxGeometry(3.2, 0.02, 0.05), M.dark, m, 2.2, Y - 0.9 + i * 0.2, s * 1.61);
+        });
     });
 
   part(g, parts, "Compressor",
@@ -949,23 +973,25 @@ ASSEMBLY.economizer = () => {
       for (const sx of [-1.7, 1.7]) for (const sz of [-1.2, 1.2]) add(new BoxGeometry(0.1, 3.0, 0.1), M.trim, n, sx, Y, sz);
     });
 
-  part(g, parts, "Outdoor-air damper",
-    "Admits fresh outdoor air; opens wide for free cooling when the outside air is cool and dry.",
-    [0, 0, 2.6], (n) => {
-      for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, n, 0, Y - 0.85 + i * 0.34, 1.21).rotation.x = 0.55;
-      add(new BoxGeometry(0.5, 0.22, 0.03), M.blue, n, -1.0, Y + 1.2, 1.22);
+  group(g, parts, "Mixing dampers",
+    "The three dampers that blend and relieve the air streams. Drill in for each.",
+    [0, 0, 2.8], (n, subs) => {
+      part(n, subs, "Outdoor-air damper",
+        "Admits fresh outdoor air; opens wide for free cooling when the outside air is cool and dry.",
+        [0, 0, 2.6], (m) => {
+          for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, m, 0, Y - 0.85 + i * 0.34, 1.21).rotation.x = 0.55;
+          add(new BoxGeometry(0.5, 0.22, 0.03), M.blue, m, -1.0, Y + 1.2, 1.22);
+        });
+      part(n, subs, "Return-air damper",
+        "Recirculates room air; closes as the outdoor-air damper opens so total flow stays constant.",
+        [0, 0, -2.6], (m) => {
+          for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, m, 0, Y - 0.85 + i * 0.34, -1.21).rotation.x = -0.55;
+          add(new BoxGeometry(0.5, 0.22, 0.03), M.green, m, -1.0, Y + 1.2, -1.22);
+        });
+      part(n, subs, "Exhaust-air damper",
+        "Relieves the extra outdoor air to keep the building from over-pressurising.",
+        [0, 2.4, 0], (m) => { for (let i = 0; i < 5; i++) add(new BoxGeometry(0.3, 0.06, 1.9), M.dark, m, -1.0 + i * 0.5, Y + 1.51, 0).rotation.z = 0.55; });
     });
-
-  part(g, parts, "Return-air damper",
-    "Recirculates room air; closes as the outdoor-air damper opens so total flow stays constant.",
-    [0, 0, -2.6], (n) => {
-      for (let i = 0; i < 6; i++) add(new BoxGeometry(2.4, 0.3, 0.06), M.dark, n, 0, Y - 0.85 + i * 0.34, -1.21).rotation.x = -0.55;
-      add(new BoxGeometry(0.5, 0.22, 0.03), M.green, n, -1.0, Y + 1.2, -1.22);
-    });
-
-  part(g, parts, "Exhaust-air damper",
-    "Relieves the extra outdoor air to keep the building from over-pressurising.",
-    [0, 2.4, 0], (n) => { for (let i = 0; i < 5; i++) add(new BoxGeometry(0.3, 0.06, 1.9), M.dark, n, -1.0 + i * 0.5, Y + 1.51, 0).rotation.z = 0.55; });
 
   part(g, parts, "Actuators & controller",
     "Sequence the three dampers together, choosing mechanical vs. free cooling from the air conditions.",
@@ -1091,22 +1117,25 @@ ASSEMBLY.recoveryWheel = () => {
     "The seal bar that keeps the two airstreams apart so only the wheel carries energy between them.",
     [0, 0, -3.2], (n) => add(new BoxGeometry(0.95, 0.18, 4.2), M.trim, n, 0, Y, 0));
 
-  const wheelp = part(g, parts, "Enthalpy wheel",
-    "A slowly turning honeycomb matrix that picks up heat and moisture on one side and releases them on the other.",
-    [-3.0, 0, 0], (n) => {
-      n.position.set(0, Y, 0);
-      const w = new Group(); w.userData.spinAxis = "x"; n.add(w);
-      add(new CylinderGeometry(1.75, 1.75, 0.5, 48), M.dark, w).rotation.z = Math.PI / 2;
-      add(new CylinderGeometry(1.6, 1.6, 0.56, 48, 1, true), M.panel, w).rotation.z = Math.PI / 2;
-      for (let r = 0.4; r < 1.6; r += 0.34) add(new TorusGeometry(r, 0.02, 8, 44), M.trim, w).rotation.y = Math.PI / 2;
-      for (let i = 0; i < 12; i++) add(new BoxGeometry(0.5, 1.5, 0.035), M.trim, w).rotation.x = (i / 12) * Math.PI * 2;
-      add(new CylinderGeometry(0.22, 0.22, 0.7, 16), M.dark, w).rotation.z = Math.PI / 2;
-      spin.push(w);
+  group(g, parts, "Wheel drive",
+    "The rotating matrix and the motor that turns it. Drill in for the wheel and its drive.",
+    [-3.0, 0, 0], (n, subs) => {
+      part(n, subs, "Enthalpy wheel",
+        "A slowly turning honeycomb matrix that picks up heat and moisture on one side and releases them on the other.",
+        [0, 1.8, 0], (m) => {
+          m.position.set(0, Y, 0);
+          const w = new Group(); w.userData.spinAxis = "x"; m.add(w);
+          add(new CylinderGeometry(1.75, 1.75, 0.5, 48), M.dark, w).rotation.z = Math.PI / 2;
+          add(new CylinderGeometry(1.6, 1.6, 0.56, 48, 1, true), M.panel, w).rotation.z = Math.PI / 2;
+          for (let r = 0.4; r < 1.6; r += 0.34) add(new TorusGeometry(r, 0.02, 8, 44), M.trim, w).rotation.y = Math.PI / 2;
+          for (let i = 0; i < 12; i++) add(new BoxGeometry(0.5, 1.5, 0.035), M.trim, w).rotation.x = (i / 12) * Math.PI * 2;
+          add(new CylinderGeometry(0.22, 0.22, 0.7, 16), M.dark, w).rotation.z = Math.PI / 2;
+          spin.push(w);
+        });
+      part(n, subs, "Drive motor & belt",
+        "A small motor turns the wheel at a few rpm through a belt around its rim.",
+        [0, -2.4, 0], (m) => add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.blue, m, 0.1, Y - 2.15, 1.4).rotation.z = Math.PI / 2);
     });
-
-  part(g, parts, "Drive motor & belt",
-    "A small motor turns the wheel at a few rpm through a belt around its rim.",
-    [0, -3.0, 0], (n) => add(new CylinderGeometry(0.3, 0.3, 0.5, 16), M.blue, n, 0.1, Y - 2.15, 1.4).rotation.z = Math.PI / 2);
 
   return { group: g, parts, spin };
 };
