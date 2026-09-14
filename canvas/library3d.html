@@ -235,12 +235,16 @@ const CATALOG = [
   { key: "tower", name: "Cooling Tower", desc: "Induced-draft tower: an axial fan on the deck pulls air up through low intake louvers to reject condenser heat." },
   { key: "pump", name: "Centrifugal Pump", desc: "End-suction volute pump: axial suction, top discharge, coupled to a motor on a common baseplate." },
   { key: "aircooled", name: "Air-Cooled Chiller", desc: "Rooftop skid with V-shaped condenser coils and a row of up-blast fans — rejects heat straight to the air, no tower needed." },
+  { key: "absorption", name: "Absorption Chiller", desc: "Two vacuum shells and a lithium-bromide solution loop — driven by heat, not a compressor. Ideal for waste heat or solar." },
+  { key: "drycooler", name: "Dry Cooler", desc: "A big finned water-to-air coil under a row of fans — rejects the loop's heat to ambient air with no water use." },
   { key: "tes", name: "Thermal Storage Tank", desc: "Tall insulated stratified chilled-water tank — stores cold overnight to shave the district plant's daytime peak." },
   { key: "rtu", name: "Packaged Rooftop Unit", desc: "Self-contained cabinet on a roof curb: up-blast condenser fans, coil louvers, a fresh-air hood, and bottom duct connections." },
+  { key: "crac", name: "CRAC Unit", desc: "A precision downflow cooler for data halls: top return, cooling coil, base EC fans blowing into the raised floor." },
   { key: "fcu", name: "Fan Coil Unit", desc: "Compact ceiling cabinet: a small blower, a 2- or 4-pipe coil, a filter and a return grille — one per zone." },
   { cat: "Heat side" },
   { key: "boiler", name: "Fire-Tube Boiler", desc: "Horizontal cylindrical shell with fire tubes, a front burner and blower, and a flue stack on top." },
   { key: "heatpump", name: "Air-Source Heat Pump", desc: "Powder-coated cabinet with a condenser coil, a front fan behind a grille, and a compressor inside." },
+  { key: "gshp", name: "Ground-Source Heat Pump", desc: "A heat pump coupled to borehole U-tubes in the earth — a stable ~12 °C source that lifts its efficiency year-round." },
   { key: "plateHX", name: "Plate Heat Exchanger", desc: "A gasketed plate pack compressed between a fixed head and pressure plate by tie-bolts, with four nozzles." },
   { cat: "Controls & distribution" },
   { key: "damper", name: "Control Damper", desc: "Galvanized frame with a linked blade set driven by an actuator — modulates airflow through the system." },
@@ -258,11 +262,13 @@ const CATALOG = [
   { key: "pv", name: "Solar PV Array", desc: "A tilted array of photovoltaic panels that powers the plant — renewables tied straight into the world model." },
   { cat: "Terminals" },
   { key: "radiator", name: "Panel Radiator", desc: "A hydronic panel with convector fins and a thermostatic valve — heats a room by radiation and convection." },
+  { key: "unitheater", name: "Unit Heater", desc: "A ceiling-hung box: a propeller fan blows room air over a hot-water coil and out through aiming louvers." },
+  { key: "chilledbeam", name: "Chilled Beam", desc: "A slim ceiling beam whose coil cools induced room air; active beams use primary-air jets to drive the induction." },
   { key: "diffuser", name: "Ceiling Diffuser", desc: "A square multi-cone supply diffuser that spreads conditioned air evenly across the space below." },
 ];
 
-/* the library is extensible — more candidates to model */
-const SOON = ["Absorption Chiller", "Ground-Source Heat Pump", "Dry Cooler", "Unit Heater", "Chilled Beam", "CRAC Unit"];
+/* the whole library is now modelled */
+const SOON = [];
 
 /* ---------- build the list ---------- */
 const listEl = document.getElementById("list");

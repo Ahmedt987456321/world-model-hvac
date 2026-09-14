@@ -1260,4 +1260,270 @@ ASSEMBLY.diffuser = () => {
   return { group: g, parts, spin };
 };
 
+/* a small up-blast axial fan spin group */
+function axfan(parent, cx, cy, cz, r, blades = 6, mat = M.dark) {
+  const w = new Group(); w.position.set(cx, cy, cz); w.userData.spinAxis = "y"; parent.add(w);
+  add(new CylinderGeometry(r * 0.16, r * 0.16, 0.24, 14), M.dark, w);
+  for (let i = 0; i < blades; i++) { const a = (i / blades) * Math.PI * 2;
+    add(new BoxGeometry(r * 0.9, 0.04, r * 0.34), mat, w, Math.cos(a) * r * 0.5, 0, Math.sin(a) * r * 0.5).rotation.y = -a; }
+  return w;
+}
+
+/* ============================ ABSORPTION CHILLER ==================== */
+ASSEMBLY.absorption = () => {
+  const g = new Group(); const parts = []; const spin = [];
+
+  part(g, parts, "Baseplate skid",
+    "The welded frame that carries the two big vacuum vessels as one shippable package.",
+    [0, -1.8, 0], (n) => add(new BoxGeometry(6.2, 0.4, 2.6), M.trim, n, 0, 0.2, 0));
+
+  part(g, parts, "Lower shell (absorber / evaporator)",
+    "Under deep vacuum, refrigerant water boils to chill the load, then lithium-bromide solution soaks the vapour up.",
+    [0, 0, 3.0], (n) => {
+      add(new CylinderGeometry(1.0, 1.0, 5.2, 28), M.panel, n, 0, 1.5, 0).rotation.z = Math.PI / 2;
+      for (const x of [-2.6, 2.6]) add(new SphereGeometry(1.0, 20, 12, 0, Math.PI), M.dark, n, x, 1.5, 0).rotation.z = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+      for (const z of [1.2, -1.1]) add(new CylinderGeometry(0.28, 0.28, 0.5, 16), M.blue, n, -2.4, 1.5, z).rotation.x = Math.PI / 2;
+    });
+
+  part(g, parts, "Upper shell (generator / condenser)",
+    "Heat boils the water back out of the solution (generator); it then condenses, ready to evaporate and chill again.",
+    [0, 2.6, 0], (n) => {
+      add(new CylinderGeometry(0.9, 0.9, 5.2, 28), clear({ o: 0.55 }), n, 0, 3.4, 0).rotation.z = Math.PI / 2;
+      for (const x of [-2.6, 2.6]) add(new SphereGeometry(0.9, 20, 12, 0, Math.PI), M.dark, n, x, 3.4, 0).rotation.z = x < 0 ? Math.PI / 2 : -Math.PI / 2;
+    });
+
+  part(g, parts, "Solution heat exchanger",
+    "Pre-heats strong solution heading to the generator using heat from the returning weak solution — the efficiency trick.",
+    [3.4, 1.2, 0], (n) => add(new BoxGeometry(0.5, 1.8, 0.7), M.dark, n, 2.9, 2.4, 0));
+
+  part(g, parts, "Solution pump",
+    "Lifts the lithium-bromide solution from the low-pressure absorber up to the generator.",
+    [0, -2.4, 2.4], (n) => {
+      add(new CylinderGeometry(0.32, 0.32, 0.5, 20), M.blue, n, 1.4, 0.55, 1.0).rotation.z = Math.PI / 2;
+      add(new BoxGeometry(0.7, 0.35, 0.5), M.yellow, n, 1.4, 0.3, 1.0);
+    });
+
+  part(g, parts, "Generator heat input",
+    "Steam or hot water — often waste heat — drives the whole cycle, so there is no large electric compressor.",
+    [-3.6, 1.6, 0], (n) => { for (const z of [0.5, -0.5]) add(new CylinderGeometry(0.2, 0.2, 1.4, 16), M.copper, n, -3.0, 3.4, z).rotation.x = Math.PI / 2; });
+
+  part(g, parts, "Control panel",
+    "Sequences the pumps and the heat valve to hold the chilled-water setpoint.",
+    [3.6, -0.4, 1.6], (n) => {
+      add(new BoxGeometry(0.3, 1.3, 1.0), M.trim, n, 3.1, 1.4, 1.0);
+      add(new BoxGeometry(0.05, 0.6, 0.7), M.blue, n, 3.27, 1.6, 1.0);
+    });
+
+  return { group: g, parts, spin };
+};
+
+/* ============================ GROUND-SOURCE HEAT PUMP ============== */
+ASSEMBLY.gshp = () => {
+  const g = new Group(); const parts = []; const spin = []; const Y = 1.7;
+
+  part(g, parts, "Cabinet",
+    "The indoor enclosure — quiet, weather-free — that houses the whole refrigerant package.",
+    [0, 2.8, 0], (n) => {
+      add(new BoxGeometry(2.8, 2.6, 2.0), clear({ o: 0.4 }), n, 0, Y, 0);
+      add(new BoxGeometry(2.86, 0.12, 2.06), M.trim, n, 0, Y + 1.3, 0);
+    });
+
+  group(g, parts, "Refrigerant circuit",
+    "The sealed heat-pump loop between the ground and the building. Drill in for its parts.",
+    [0, 0, 3.0], (n, subs) => {
+      part(n, subs, "Compressor",
+        "Compresses the refrigerant vapour, driving heat from the ground loop up to the building water.",
+        [0, -1.6, 0], (m) => {
+          add(new CylinderGeometry(0.42, 0.42, 0.9, 24), M.dark, m, -0.7, Y - 0.6, 0);
+          const w = new Group(); w.position.set(-0.7, Y - 0.6, 0); w.userData.spinAxis = "y"; m.add(w);
+          add(new CylinderGeometry(0.2, 0.2, 0.3, 12), M.blue, w); spin.push(w);
+        });
+      part(n, subs, "Source heat exchanger",
+        "A coaxial or plate exchanger that pulls low-grade heat from the circulating ground-loop water.",
+        [-1.6, 0, 0], (m) => add(new BoxGeometry(0.4, 1.4, 0.7), M.bright, m, -0.6, Y, 0.5));
+      part(n, subs, "Load heat exchanger",
+        "Hands the upgraded heat to the building's heating water (or takes heat out of it in cooling).",
+        [1.6, 0, 0], (m) => add(new BoxGeometry(0.4, 1.4, 0.7), M.blue, m, 0.6, Y, 0.5));
+      part(n, subs, "Reversing & expansion valves",
+        "The reversing valve swaps heating and cooling; the expansion valve meters the refrigerant.",
+        [0, 1.6, 0], (m) => {
+          add(new CylinderGeometry(0.15, 0.15, 0.7, 16), M.copper, m, 0.0, Y + 0.6, -0.4).rotation.z = Math.PI / 2;
+          add(new BoxGeometry(0.28, 0.28, 0.28), M.yellow, m, -0.4, Y + 0.6, -0.4);
+        });
+    });
+
+  part(g, parts, "Ground loop (borehole U-tubes)",
+    "Sealed U-tubes grouted deep in the earth exchange heat with the ~12 °C ground — a stable source all year.",
+    [0, -3.0, 0], (n) => {
+      for (const x of [-1.0, 0, 1.0]) {
+        for (const dz of [-0.15, 0.15]) add(new CylinderGeometry(0.09, 0.09, 3.4, 10), M.blue, n, x, -1.7, dz);
+        add(new TorusGeometry(0.15, 0.09, 8, 16, Math.PI), M.blue, n, x, -3.4, 0).rotation.x = Math.PI / 2;
+      }
+      for (const x of [-1.0, 0, 1.0]) add(new CylinderGeometry(0.3, 0.34, 0.3, 16), M.trim, n, x, 0.0, 0);
+    });
+
+  return { group: g, parts, spin };
+};
+
+/* ============================ DRY COOLER ========================== */
+ASSEMBLY.drycooler = () => {
+  const g = new Group(); const parts = []; const spin = []; const Y = 1.5;
+
+  part(g, parts, "Frame & legs",
+    "A galvanised steel frame that holds the coil and fans and stands the unit off the roof.",
+    [0, -2.2, 0], (n) => {
+      add(new BoxGeometry(8.4, 0.35, 2.8), M.trim, n, 0, 0.18, 0);
+      for (const sx of [-3.8, 3.8]) for (const sz of [-1.2, 1.2]) add(new BoxGeometry(0.16, 1.0, 0.16), M.trim, n, sx, 0.6, sz);
+    });
+
+  group(g, parts, "Cooling section",
+    "Rejects the loop's heat to ambient air with no water use. Drill in for the coil and fans.",
+    [0, 2.4, 0], (n, subs) => {
+      part(n, subs, "Finned coils (V-bank)",
+        "Warm process water flows through finned tubes; passing air carries the heat away — purely dry, sensible cooling.",
+        [0, 0, 2.6], (m) => {
+          for (const s of [1, -1]) for (let i = 0; i < 9; i++)
+            add(new BoxGeometry(0.66, 1.6, 0.03), M.dark, m, -3.2 + i * 0.8, Y, s * 1.2).rotation.y = s * 0.3;
+        });
+      part(n, subs, "Axial fans",
+        "A row of fans pulls ambient air across the coils; they speed up as it gets hotter or the load rises.",
+        [0, 2.2, 0], (m) => {
+          for (const x of [-2.7, -0.9, 0.9, 2.7]) {
+            add(new TorusGeometry(0.7, 0.07, 12, 34), M.trim, m, x, Y + 0.95, 0).rotation.x = Math.PI / 2;
+            spin.push(axfan(m, x, Y + 1.0, 0, 0.64, 6, M.dark));
+          }
+        });
+    });
+
+  part(g, parts, "Headers & connections",
+    "Manifolds that split the water evenly across the coil circuits and tie the unit into the loop.",
+    [-4.2, 0, 0], (n) => {
+      add(new CylinderGeometry(0.22, 0.22, 2.4, 20), M.blue, n, -3.9, Y, 0).rotation.x = Math.PI / 2;
+      for (const z of [0.8, -0.8]) add(new CylinderGeometry(0.16, 0.16, 0.6, 16), M.blue, n, -4.2, Y, z).rotation.z = Math.PI / 2;
+    });
+
+  return { group: g, parts, spin };
+};
+
+/* ============================ UNIT HEATER ======================== */
+ASSEMBLY.unitheater = () => {
+  const g = new Group(); const parts = []; const spin = []; const Y = 2.4;
+
+  part(g, parts, "Casing",
+    "A compact steel box hung from the ceiling that houses the coil and fan and directs the warm air.",
+    [0, 1.6, 0], (n) => add(new BoxGeometry(2.2, 1.8, 1.8), clear({ c: 0xc9d0d6, m: 0.8, o: 0.45 }), n, 0, Y, 0));
+
+  part(g, parts, "Heating coil",
+    "Hot water or steam in a finned coil warms the air the fan blows through it.",
+    [0, 0, 2.4], (n) => {
+      for (let i = 0; i < 8; i++) add(new BoxGeometry(0.04, 1.4, 1.4), M.copper, n, -0.3 + i * 0.07, Y, 0);
+      for (const sy of [0.7, -0.7]) add(new CylinderGeometry(0.1, 0.1, 0.5, 12), M.copper, n, 0.05, Y + sy, 0.9);
+    });
+
+  part(g, parts, "Propeller fan & motor",
+    "An axial fan at the back draws room air in and pushes it forward over the coil.",
+    [0, 0, -2.6], (n) => {
+      add(new TorusGeometry(0.8, 0.08, 12, 36), M.trim, n, -0.9, Y, 0).rotation.y = Math.PI / 2;
+      const w = new Group(); w.position.set(-0.85, Y, 0); w.userData.spinAxis = "x"; n.add(w);
+      add(new CylinderGeometry(0.16, 0.16, 0.24, 14), M.dark, w).rotation.z = Math.PI / 2;
+      for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2;
+        add(new BoxGeometry(0.05, 0.7, 0.3), M.panel, w, 0, Math.cos(a) * 0.42, Math.sin(a) * 0.42).rotation.x = a + 0.4; }
+      spin.push(w);
+    });
+
+  part(g, parts, "Discharge louvers",
+    "Adjustable vanes at the front aim the warm-air throw down into the occupied space.",
+    [2.4, 0, 0], (n) => { for (let i = 0; i < 5; i++) add(new BoxGeometry(0.06, 0.28, 1.5), M.panel, n, 1.15, Y - 0.6 + i * 0.32, 0).rotation.z = 0.5; });
+
+  part(g, parts, "Hanger brackets",
+    "Mounting arms that suspend the heater from the structure above.",
+    [0, 2.4, 0], (n) => { for (const sx of [-0.9, 0.9]) add(new BoxGeometry(0.1, 0.7, 0.1), M.trim, n, sx, Y + 1.15, 0); });
+
+  return { group: g, parts, spin };
+};
+
+/* ============================ CHILLED BEAM ====================== */
+ASSEMBLY.chilledbeam = () => {
+  const g = new Group(); const parts = []; const spin = []; const Y = 2.6;
+
+  part(g, parts, "Housing & perforated face",
+    "The slim ceiling casing; room air enters and cooled air leaves through its perforated underside.",
+    [0, -1.8, 0], (n) => {
+      add(new BoxGeometry(5.2, 0.5, 1.2), clear({ c: 0xc9d0d6, m: 0.85, o: 0.4 }), n, 0, Y, 0);
+      for (let i = 0; i < 18; i++) add(new BoxGeometry(0.16, 0.05, 1.0), M.panel, n, -2.4 + i * 0.28, Y - 0.28, 0);
+    });
+
+  part(g, parts, "Cooling coil",
+    "Chilled water in a finned coil cools the air passing up through it — the heat-transfer heart of the beam.",
+    [0, 1.8, 0], (n) => {
+      for (let i = 0; i < 22; i++) add(new BoxGeometry(0.16, 0.5, 0.9), i % 2 ? M.bright : M.copper, n, -2.3 + i * 0.21, Y + 0.45, 0);
+    });
+
+  part(g, parts, "Induction nozzles",
+    "In an active beam, primary air jets from these nozzles induce room air up through the coil — no moving parts.",
+    [0, 0, 2.2], (n) => { for (let i = 0; i < 12; i++) add(new CylinderGeometry(0.04, 0.06, 0.2, 10), M.dark, n, -2.2 + i * 0.4, Y + 0.15, 0.45); });
+
+  part(g, parts, "Primary-air plenum",
+    "A duct box that feeds conditioned primary air evenly to all the induction nozzles.",
+    [0, 2.0, 0], (n) => {
+      add(new BoxGeometry(5.0, 0.5, 0.7), M.galv, n, 0, Y + 0.75, 0);
+      add(new CylinderGeometry(0.28, 0.28, 0.5, 18), M.galv, n, -2.6, Y + 0.75, 0).rotation.z = Math.PI / 2;
+    });
+
+  part(g, parts, "Water connections",
+    "Flow and return tails that tie the beam's coil into the chilled-water loop.",
+    [3.2, 0.8, 0], (n) => { for (const z of [0.25, -0.25]) add(new CylinderGeometry(0.08, 0.08, 0.6, 12), M.copper, n, 2.5, Y + 0.45, z).rotation.z = Math.PI / 2; });
+
+  return { group: g, parts, spin };
+};
+
+/* ============================ CRAC UNIT ======================== */
+ASSEMBLY.crac = () => {
+  const g = new Group(); const parts = []; const spin = []; const Y = 2.2;
+
+  part(g, parts, "Cabinet",
+    "A tall precision-cooling enclosure standing on the data-hall floor; air returns at the top and leaves at the bottom.",
+    [0, 3.0, 0], (n) => {
+      add(new BoxGeometry(2.4, 4.2, 1.8), clear({ o: 0.4 }), n, 0, Y, 0);
+      add(new BoxGeometry(2.46, 0.12, 1.86), M.trim, n, 0, Y + 2.1, 0);
+    });
+
+  part(g, parts, "Filter (return air)",
+    "Hot return air from the servers is drawn in at the top and cleaned before the coil.",
+    [0, 2.6, 0], (n) => {
+      add(new BoxGeometry(2.0, 0.14, 1.5), M.dark, n, 0, Y + 1.9, 0);
+      add(new BoxGeometry(1.9, 0.18, 1.4), MEDIA, n, 0, Y + 1.78, 0);
+    });
+
+  part(g, parts, "Cooling coil",
+    "A chilled-water (or DX) coil that removes the servers' heat — high sensible capacity, little dehumidification.",
+    [0, 0, 2.4], (n) => {
+      for (let i = 0; i < 10; i++) add(new BoxGeometry(1.9, 0.9, 0.03), M.bright, n, 0, Y + 0.7, -0.45 + i * 0.09);
+      for (const sx of [0.7, -0.7]) add(new CylinderGeometry(0.1, 0.1, 0.5, 12), M.blue, n, sx, Y + 0.2, 0.8);
+    });
+
+  part(g, parts, "Downflow EC fans",
+    "Variable-speed fans at the base push the cooled air down into the raised floor to feed the cold aisles.",
+    [0, -2.6, 0], (n) => {
+      for (const x of [-0.6, 0.6]) {
+        add(new TorusGeometry(0.55, 0.06, 12, 30), M.trim, n, x, Y - 1.7, 0).rotation.x = Math.PI / 2;
+        spin.push(axfan(n, x, Y - 1.7, 0, 0.5, 7, M.dark));
+      }
+    });
+
+  part(g, parts, "Controls & humidifier",
+    "Precision controls hold tight temperature and humidity; a small humidifier trims the room's moisture.",
+    [2.6, 0.5, 0], (n) => {
+      add(new BoxGeometry(0.28, 1.4, 1.0), M.trim, n, 1.25, Y + 0.4, 0);
+      add(new BoxGeometry(0.06, 0.6, 0.7), M.green, n, 1.4, Y + 0.6, 0);
+      add(new CylinderGeometry(0.22, 0.22, 0.7, 16), M.bright, n, 1.1, Y - 0.7, 0);
+    });
+
+  part(g, parts, "Floor discharge plenum",
+    "The bottom opening that delivers cold supply air into the pressurised raised floor.",
+    [0, -3.2, 0], (n) => add(new BoxGeometry(1.9, 0.5, 1.4), M.dark, n, 0, Y - 2.1, 0));
+
+  return { group: g, parts, spin };
+};
+
 export const HERO = Object.keys(ASSEMBLY);

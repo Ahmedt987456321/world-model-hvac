@@ -324,4 +324,100 @@ export const PHYSICS = {
       return [["Perimeter/area", f2(PA), "1/m"], ["Insertion loss", f1(IL), "dB"]];
     },
   },
+
+  absorption: {
+    title: "Absorption chiller",
+    ref: "Thermal-COP energy balance (LiBr–water)",
+    law: "Q_chill = ṁ·c_p·ΔT   ·   COP_th = Q_chill/Q_heat   ·   Q_reject = Q_chill + Q_heat",
+    inputs: [
+      ["mdot", "Chilled-water flow", "kg/s", 40, 5, 120, 1],
+      ["dT", "ΔT return−supply", "K", 6, 2, 12, 0.5],
+      ["COP", "Thermal COP", "", 0.72, 0.5, 1.5, 0.01],
+    ],
+    compute: ({ mdot, dT, COP }) => {
+      const Q = mdot * CPW * dT, Qh = Q / COP;
+      return [
+        ["Cooling capacity", f1(Q / 1000), "kW  (" + f1(Q / 3517) + " tons)"],
+        ["Driving heat", f1(Qh / 1000), "kW"],
+        ["Heat rejected", f1((Q + Qh) / 1000), "kW"],
+      ];
+    },
+  },
+
+  gshp: {
+    title: "Ground-source heat pump",
+    ref: "Carnot-COP with a stable ground source",
+    law: "COP_h = η·(T_h+273)/(T_h − T_g)   ·   Q_h = W·COP_h   ·   Q_ground = Q_h − W",
+    inputs: [
+      ["Tg", "Ground-loop temp", "°C", 12, 2, 25, 0.5],
+      ["Th", "Supply water", "°C", 40, 30, 55, 1],
+      ["eta", "Carnot fraction η", "", 0.5, 0.3, 0.65, 0.01],
+      ["W", "Compressor power", "kW", 8, 1, 40, 1],
+    ],
+    compute: ({ Tg, Th, eta, W }) => {
+      const COP = eta * (Th + 273.15) / Math.max(1, Th - Tg), Qh = W * COP;
+      return [["COP (heating)", f2(COP), ""], ["Heat delivered", f1(Qh), "kW"], ["Heat from ground", f1(Qh - W), "kW"]];
+    },
+  },
+
+  drycooler: {
+    title: "Dry cooler",
+    ref: "Sensible air-cooled heat rejection",
+    law: "Q = ṁ_w·c_p·ΔT   ·   dry-bulb limited: T_out ≈ T_db + approach",
+    inputs: [
+      ["mdot", "Water flow", "kg/s", 25, 5, 90, 1],
+      ["Tin", "Water in", "°C", 45, 25, 60, 0.5],
+      ["Tdb", "Ambient dry-bulb", "°C", 35, 10, 48, 1],
+      ["approach", "Approach", "K", 5, 3, 15, 0.5],
+    ],
+    compute: ({ mdot, Tin, Tdb, approach }) => {
+      const Tout = Tdb + approach, range = Math.max(0, Tin - Tout), Q = mdot * CPW * range;
+      return [["Leaving water", f1(Tout), "°C"], ["Range", f1(range), "K"], ["Heat rejected", f1(Q / 1000), "kW"]];
+    },
+  },
+
+  unitheater: {
+    title: "Unit heater",
+    ref: "Air-side sensible heating balance",
+    law: "ṁ_air = ρ·V̇   ·   Q = ṁ_air·c_p·(T_out − T_in)",
+    inputs: [
+      ["V", "Airflow", "m³/s", 1.2, 0.2, 4, 0.1],
+      ["Tin", "Room air", "°C", 16, 5, 22, 0.5],
+      ["Tout", "Discharge air", "°C", 40, 25, 55, 0.5],
+    ],
+    compute: ({ V, Tin, Tout }) => {
+      const m = RHOA * V, Q = m * CPA * (Tout - Tin);
+      return [["Mass flow", f2(m), "kg/s"], ["Heat output", f1(Q / 1000), "kW"]];
+    },
+  },
+
+  chilledbeam: {
+    title: "Active chilled beam",
+    ref: "Water-side balance + induction ratio",
+    law: "Q_water = ṁ·c_p·ΔT   ·   room air induced ≈ K·V̇_primary",
+    inputs: [
+      ["mdot", "Water flow", "kg/s", 0.08, 0.01, 0.4, 0.01],
+      ["dT", "Water ΔT", "K", 3, 1, 6, 0.5],
+      ["Vp", "Primary air", "L/s·m", 12, 4, 25, 1],
+      ["K", "Induction ratio", "", 4, 2, 6, 0.5],
+    ],
+    compute: ({ mdot, dT, Vp, K }) => {
+      const Q = mdot * CPW * dT;
+      return [["Cooling output", f1(Q / 1000), "kW"], ["Induced room air", f1(Vp * K), "L/s·m"]];
+    },
+  },
+
+  crac: {
+    title: "CRAC / precision cooling",
+    ref: "Sensible data-hall cooling",
+    law: "Q = ρ·V̇·c_p·ΔT   ·   SHR ≈ 0.95–1.0 (little latent)",
+    inputs: [
+      ["V", "Supply airflow", "m³/s", 6, 1, 20, 0.5],
+      ["dT", "Coil ΔT", "K", 11, 5, 16, 0.5],
+    ],
+    compute: ({ V, dT }) => {
+      const Q = RHOA * V * CPA * dT;
+      return [["Sensible capacity", f1(Q / 1000), "kW  (" + f1(Q / 3517) + " tons)"], ["Airflow", (V * 3600).toFixed(0), "m³/h"]];
+    },
+  },
 };
