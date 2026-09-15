@@ -36,6 +36,30 @@
   .pick.show { opacity: 1; }
   .pick b { color: #7fe6f0; }
   .foot { position: fixed; right: 16px; bottom: 14px; z-index: 10; font-size: 11px; color: #6a7d8f; font-family: "IBM Plex Mono", monospace; }
+  /* machine inspector (right) */
+  .inspect { position: fixed; right: 16px; top: 16px; z-index: 11; width: 300px;
+    background: rgba(15,21,28,0.9); border: 1px solid rgba(47,188,203,0.55); border-radius: 14px;
+    padding: 14px 16px; backdrop-filter: blur(10px); max-height: calc(100vh - 32px); overflow-y: auto; }
+  .inspect .itag { font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #2fbccb; font-family: "IBM Plex Mono", monospace; }
+  .inspect h2 { margin: 3px 0 0; font-size: 17px; font-weight: 600; }
+  .inspect .role { margin: 5px 0 0; font-size: 12px; color: #9fb0c0; line-height: 1.5; }
+  .inspect .close { position: absolute; right: 12px; top: 12px; width: 24px; height: 24px; border-radius: 7px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); color: #cdd8e2; cursor: pointer; font-size: 14px; line-height: 1; }
+  .live { margin: 12px 0 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
+  .live .lk { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #7f8ea0; }
+  .live .lrow { display: flex; justify-content: space-between; align-items: baseline; padding: 5px 0; border-bottom: 1px solid rgba(255,255,255,0.05); }
+  .live .lrow:last-child { border-bottom: 0; }
+  .live .ll { font-size: 12px; color: #b9cbd6; }
+  .live .lv { font-family: "IBM Plex Mono", monospace; font-size: 14px; color: #eaffff; font-weight: 600; }
+  .live .lv small { color: #7f8ea0; font-weight: 400; font-size: 11px; }
+  .ex2 { margin: 12px 0 0; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 10px; }
+  .ex2 .row { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 6px; }
+  .ex2 .row .vv { font-family: "IBM Plex Mono", monospace; color: #7fe6f0; }
+  .ex2 input[type=range] { width: 100%; accent-color: #2fbccb; }
+  .ex2 .note { font-size: 10px; color: #6a7d8f; margin-top: 6px; line-height: 1.4; }
+  #plabels { position: fixed; inset: 0; pointer-events: none; z-index: 9; overflow: hidden; }
+  .plabel { position: absolute; transform: translate(-50%,-50%); background: rgba(12,17,24,0.86);
+    border: 1px solid #2fbccb; color: #dff6f9; font-size: 10.5px; padding: 2px 7px; border-radius: 20px; white-space: nowrap; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/jsm/" } }
@@ -61,18 +85,32 @@
   </div>
 </div>
 <div class="pick" id="pick"></div>
+<div class="inspect" id="inspect" hidden>
+  <button class="close" id="iClose">✕</button>
+  <div class="itag">◈ Live component</div>
+  <h2 id="iName">—</h2>
+  <div class="role" id="iRole"></div>
+  <div class="live" id="iLive"></div>
+  <div class="ex2" id="iEx">
+    <div class="row"><span>Open it up</span><span class="vv" id="iExVal">0%</span></div>
+    <input type="range" id="iExSlider" min="0" max="100" value="0" />
+    <div class="note">Pull the machine apart to see its parts, live in the yard.</div>
+  </div>
+</div>
+<div id="plabels"></div>
 <div class="foot">drag to orbit · scroll to zoom · click a machine</div>
 
 <script type="module">
 import * as THREE from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { BUILD, M } from "./models3d.js";
+import { ASSEMBLY } from "./parts3d.js";
 
 const {
   Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3, Raycaster, Vector2, Quaternion,
   BoxGeometry, CylinderGeometry, TorusGeometry, PlaneGeometry, SphereGeometry, ConeGeometry,
   MeshStandardMaterial, ShadowMaterial, DirectionalLight, HemisphereLight, AmbientLight,
-  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils,
+  PMREMGenerator, PCFSoftShadowMap, ACESFilmicToneMapping, SRGBColorSpace, MathUtils, BoxHelper,
 } = THREE;
 
 /* ---------- renderer / scene ---------- */
@@ -130,12 +168,13 @@ function buildHall() {
     add(new ConeGeometry(0.62, 1.7, 16), domeMat, g, x, 11.3, z);
   }
   g.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-  g.userData = { name: "Prayer Hall", role: "The conditioned zone — ~2,500 pilgrims under a 48 °C sky.", dome: domeMat };
+  g.userData = { name: "Prayer Hall", role: "The conditioned zone — ~2,500 pilgrims under a 48 °C sky.", dome: domeMat, key: "hall" };
   return g;
 }
 
 /* ---------- place equipment from the shared model library ---------- */
 const spinners = [];
+const units = [];
 function place(key, x, z, scale, name, role) {
   const built = BUILD[key]();
   const grp = built.group;
@@ -144,9 +183,11 @@ function place(key, x, z, scale, name, role) {
   const box = new Box3().setFromObject(grp);
   const c = box.getCenter(new Vector3());
   grp.position.set(x - c.x, -box.min.y, z - c.z);
-  grp.userData = { name, role };
+  const unit = { key, x, z, scale, name, role, grp, asm: null, parts: null, spin: null };
+  grp.userData = { name, role, key, unitRef: unit };
   scene.add(grp);
   for (const s of (built.spin || [])) spinners.push(s);
+  units.push(unit);
   return grp;
 }
 
@@ -277,6 +318,7 @@ function updateHUD() {
   const good = Tr <= 26 ? 1 : 0; P.hall.userData.dome.emissive.setRGB(good ? 0 : 0.25, good ? 0.12 : 0.05, good ? 0.06 : 0);
   P.hall.userData.dome.emissiveIntensity = 0.4;
   drawChart(idx);
+  if (sel) renderLive();
 }
 const playBtn = el("play");
 function play() { playing = true; playBtn.textContent = "❚❚ Pause"; if (idx >= N - 1) idx = 0; startIdx = idx; t0 = performance.now(); }
@@ -287,22 +329,98 @@ el("scrub").oninput = e => { pause(); idx = +e.target.value; updateHUD(); };
 /* ---------- orbit ---------- */
 let az = 0.78, pol = 1.02, rad = 58; const target = new Vector3(-6, 4, 1);
 function updateCam() { camera.position.set(target.x + rad * Math.sin(pol) * Math.sin(az), target.y + rad * Math.cos(pol), target.z + rad * Math.sin(pol) * Math.cos(az)); camera.lookAt(target); }
-let drag = false, moved = false, px = 0, py = 0;
-renderer.domElement.addEventListener("pointerdown", e => { drag = true; moved = false; px = e.clientX; py = e.clientY; });
-addEventListener("pointerup", e => { drag = false; if (!moved) pick(e); });
+let drag = false, moved = false, downCanvas = false, px = 0, py = 0;
+renderer.domElement.addEventListener("pointerdown", e => { drag = true; downCanvas = true; moved = false; px = e.clientX; py = e.clientY; });
+addEventListener("pointerup", e => { drag = false; if (downCanvas && !moved) pick(e); downCanvas = false; });
 addEventListener("pointermove", e => { if (!drag) return; if (Math.abs(e.clientX - px) + Math.abs(e.clientY - py) > 4) moved = true; az -= (e.clientX - px) * 0.005; px = e.clientX; pol = MathUtils.clamp(pol - (e.clientY - py) * 0.005, 0.2, 1.4); py = e.clientY; updateCam(); });
 renderer.domElement.addEventListener("wheel", e => { e.preventDefault(); rad = MathUtils.clamp(rad * (1 + Math.sign(e.deltaY) * 0.08), 12, 120); updateCam(); }, { passive: false });
 
-/* ---------- click to identify a machine ---------- */
+/* ---------- click a machine → live inspector + open-it-up ---------- */
 const ray = new Raycaster(); const pickEl = el("pick");
+const selBox = new BoxHelper(new THREE.Object3D(), 0xffb547);
+selBox.material.depthTest = false; selBox.material.transparent = true; selBox.visible = false; scene.add(selBox);
+let sel = null, selGrp = null, expT = 0, asmSpin = [];
+const inspectEl = el("inspect");
+
+function liveRows(key) {
+  const tons = Math.max(0, trace.tons[idx]), To = trace.Tout[idx], Tr = trace.Troom[idx], Ts = trace.Ts[idx];
+  const lf = Math.max(0, Math.min(1, tons / (trace.peakTons || 1))), kW = tons * 3.517, h = (trace.t[idx] % 86400) / 3600;
+  switch (key) {
+    case "chiller": { const c = tons / 2, cop = 6.2 - 1.4 * lf, p = c * 3.517 / cop;
+      return [["Cooling", c.toFixed(0), "tons"], ["COP", cop.toFixed(2), ""], ["Compressor", p.toFixed(0), "kW"], ["Capacity", (lf * 100).toFixed(0), "%"]]; }
+    case "tower": return [["Heat rejected", (kW * 1.25 / 2).toFixed(0), "kW"], ["Fan speed", (5 + lf * 90).toFixed(0), "%"], ["Approach", "≈4", "K"]];
+    case "pump": return [["Flow", (30 + lf * 70).toFixed(0), "L/s"], ["Speed", (40 + lf * 60).toFixed(0), "%"], ["Head", "32", "m"]];
+    case "plateHX": return [["Duty", kW.toFixed(0), "kW"], ["Approach", "≈1.5", "K"]];
+    case "ahu": return [["Supply air", Ts.toFixed(1), "°C"], ["Coil duty", kW.toFixed(0), "kW"], ["Mode", lf > 0.05 ? "cooling" : "idle", ""]];
+    case "tes": { const mode = (h >= 0 && h < 6) ? "charging" : (h >= 12 && h < 18) ? "discharging" : "holding";
+      const soc = Math.max(5, Math.min(100, h < 6 ? 40 + h * 10 : h < 18 ? 100 - (h - 6) / 12 * 85 : 15 + (h - 18) / 6 * 25));
+      return [["Mode", mode, ""], ["State of charge", soc.toFixed(0), "%"], ["Usable ΔT", "8", "K"]]; }
+    case "valve": return [["Position", (lf * 100).toFixed(0), "%"], ["Chilled flow", (lf * 100).toFixed(0), "%"]];
+    case "sensor": return [["Reads", Ts.toFixed(1), "°C"], ["Setpoint", "24.0", "°C"], ["Error", (Ts - 24).toFixed(1), "K"]];
+    case "expansiontank": return [["Pressure", "2.5", "bar"], ["Status", "holding", ""]];
+    case "hall": { const comf = trace.Troom.slice(0, idx + 1).filter(v => v >= 22 && v <= 26).length / (idx + 1);
+      const occ = (h >= 3 && h < 23) ? "~2,500" : "low";
+      return [["Room temp", Tr.toFixed(1), "°C"], ["Outdoor", To.toFixed(1), "°C"], ["Occupancy", occ, ""], ["Comfort", (comf * 100).toFixed(0), "%"]]; }
+    default: return [["Plant load", tons.toFixed(0), "tons"]];
+  }
+}
+function renderLive() {
+  if (!sel) return;
+  const rows = liveRows(sel.userData.key);
+  el("iLive").innerHTML = `<div class="lk">Live state · from the simulation</div>` + rows.map(([l, v, u]) =>
+    `<div class="lrow"><span class="ll">${l}</span><span class="lv">${v}${u ? ` <small>${u}</small>` : ""}</span></div>`).join("");
+}
+function openAsm(unit) {
+  if (unit.asm || !ASSEMBLY[unit.key]) return;
+  const built = ASSEMBLY[unit.key]();
+  const grp = built.group; grp.scale.setScalar(unit.scale); grp.updateMatrixWorld(true);
+  const box = new Box3().setFromObject(grp), c = box.getCenter(new Vector3());
+  grp.position.set(unit.x - c.x, -box.min.y, unit.z - c.z);
+  scene.add(grp);
+  unit.asm = grp; unit.parts = built.parts; unit.spin = built.spin || [];
+  unit.grp.visible = false; asmSpin = unit.spin; selGrp = grp;
+  el("plabels").innerHTML = "";
+  unit.parts.forEach((p, i) => { const d = document.createElement("div"); d.className = "plabel"; d.dataset.i = i; d.textContent = p.userData.name; d.hidden = true; el("plabels").appendChild(d); });
+}
+function closeAsm(unit) {
+  if (!unit || !unit.asm) return;
+  scene.remove(unit.asm); unit.asm = null; unit.parts = null; unit.spin = null;
+  unit.grp.visible = true; asmSpin = []; el("plabels").innerHTML = "";
+}
+function openInspect(o) {
+  const unit = o.userData.unitRef;
+  if (sel && sel !== o) closeInspect(true);
+  sel = o; selGrp = unit ? unit.grp : o;
+  el("iName").textContent = o.userData.name;
+  el("iRole").textContent = o.userData.role || "";
+  const hasAsm = unit && ASSEMBLY[unit.key];
+  el("iEx").style.display = hasAsm ? "" : "none";
+  el("iExSlider").value = 0; el("iExVal").textContent = "0%"; expT = 0;
+  renderLive();
+  selBox.setFromObject(selGrp); selBox.visible = true;
+  inspectEl.hidden = false;
+  pickEl.classList.remove("show");
+}
+function closeInspect(keepBox) {
+  if (sel && sel.userData.unitRef) closeAsm(sel.userData.unitRef);
+  sel = null; selGrp = null; expT = 0; asmSpin = [];
+  inspectEl.hidden = true; if (!keepBox) selBox.visible = false;
+}
+el("iClose").onclick = () => closeInspect(false);
+el("iExSlider").oninput = e => {
+  expT = +e.target.value / 100; el("iExVal").textContent = e.target.value + "%";
+  const unit = sel && sel.userData.unitRef; if (!unit) return;
+  if (expT > 0.01 && !unit.asm) { openAsm(unit); selBox.setFromObject(unit.asm); }
+  if (expT <= 0.01 && unit.asm) { closeAsm(unit); selGrp = unit.grp; selBox.setFromObject(unit.grp); }
+};
 function pick(e) {
   const m = new Vector2((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
   ray.setFromCamera(m, camera);
   const hit = ray.intersectObjects(scene.children, true)[0];
   let o = hit && hit.object;
   while (o && !(o.userData && o.userData.name)) o = o.parent;
-  if (o) { pickEl.innerHTML = `<b>${o.userData.name}</b> — ${o.userData.role || ""}`; pickEl.classList.add("show"); }
-  else pickEl.classList.remove("show");
+  if (o) openInspect(o);
+  else closeInspect(false);
 }
 
 /* ---------- resize / loop ---------- */
@@ -310,7 +428,7 @@ function resize() { camera.aspect = innerWidth / innerHeight; camera.updateProje
 addEventListener("resize", resize);
 resize(); updateCam(); updateHUD();
 
-const tmp = new Vector3();
+const tmp = new Vector3(); const _pb = new Box3();
 function tick(now) {
   requestAnimationFrame(tick);
   if (playing) {
@@ -328,6 +446,23 @@ function tick(now) {
       f.spheres[i].position.lerpVectors(f.a, f.b, t);
     }
   }
+  // open-it-up: explode the inspected machine in place + label its parts
+  const u = sel && sel.userData.unitRef;
+  if (u && u.asm) {
+    for (const p of u.parts) p.position.copy(p.userData.home).addScaledVector(p.userData.dir, expT);
+    for (const s of asmSpin) s.rotation[s.userData.spinAxis || "x"] += sp;
+    const lbls = el("plabels").children, show = expT > 0.05;
+    for (let i = 0; i < u.parts.length; i++) {
+      const lb = lbls[i]; if (!lb) continue;
+      if (!show) { lb.hidden = true; continue; }
+      _pb.setFromObject(u.parts[i]); _pb.getCenter(tmp); tmp.project(camera);
+      if (tmp.z > 1) { lb.hidden = true; continue; }
+      lb.hidden = false;
+      lb.style.left = ((tmp.x * 0.5 + 0.5) * innerWidth) + "px";
+      lb.style.top = ((-tmp.y * 0.5 + 0.5) * innerHeight) + "px";
+    }
+  }
+  if (selGrp) { if (u && u.asm && expT > 0.05) selBox.visible = false; else { selBox.visible = true; selBox.setFromObject(selGrp); } }
   renderer.render(scene, camera);
 }
 requestAnimationFrame(tick);
