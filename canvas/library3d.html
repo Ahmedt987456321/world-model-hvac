@@ -128,6 +128,23 @@
   .part.sel .idx { background: #ffb547; color: #2a1c00; }
   .callout.sel { background: #ffb547; color: #241a00; border-color: #ffd694; }
   .callout.sel .cidx { color: #6b4b00; }
+  /* in-3D teaching overlay */
+  #teach { position: absolute; left: 0; right: 346px; bottom: 0; top: 0; z-index: 6; pointer-events: none; }
+  #teach.wide { right: 0; }
+  .tcap { position: absolute; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(600px, 82%);
+    background: rgba(10,15,20,0.82); border: 1px solid rgba(47,188,203,0.4); border-radius: 14px;
+    padding: 15px 20px; backdrop-filter: blur(8px); text-align: center; }
+  .tcap .tk { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #2fbccb; font-family: "IBM Plex Mono", monospace; margin-bottom: 6px; }
+  .tcap .tsay { font-size: 16.5px; line-height: 1.5; color: #eef6fb; font-weight: 400; }
+  .tstate { position: absolute; left: 50%; top: 28px; transform: translateX(-50%); display: flex; gap: 10px; }
+  .tstate .chip { background: rgba(10,15,20,0.8); border: 1px solid #2a3947; border-radius: 22px;
+    padding: 7px 14px; text-align: center; backdrop-filter: blur(6px); min-width: 74px; }
+  .tstate .chip .ck { font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase; color: #7f8ea0; font-family: "IBM Plex Mono", monospace; }
+  .tstate .chip .cv { font-size: 15px; font-weight: 600; margin-top: 2px; font-family: "IBM Plex Mono", monospace; }
+  .tstate .chip.hot .cv { color: #ff8a5c; } .tstate .chip.warm .cv { color: #ffc061; }
+  .tstate .chip.cold .cv { color: #6fb8ff; } .tstate .chip.mild .cv { color: #8fd6c0; }
+  .tstate .chip.hp .cv { color: #ff9a6a; } .tstate .chip.lp .cv { color: #7fd3ff; }
+  .tstate .chip.ph .cv { color: #cfe6ef; }
   /* Learn tab */
   .learn .intro { font-size: 12px; color: #b9cbd6; line-height: 1.55; margin: 2px 0 12px; }
   .learn .dots { display: flex; gap: 5px; margin-bottom: 10px; }
@@ -183,6 +200,13 @@
     <div id="stage"></div>
     <div class="label"><h2 id="mName">—</h2><p id="mDesc"></p></div>
     <div id="callouts"></div>
+    <div id="teach" hidden>
+      <div class="tstate" id="tState"></div>
+      <div class="tcap">
+        <div class="tk" id="tKick"></div>
+        <div class="tsay" id="tSay"></div>
+      </div>
+    </div>
     <div class="hud">
       <button id="btnSpin" class="on">Spin</button>
       <button id="btnAuto" class="on">Auto-rotate</button>
@@ -685,19 +709,27 @@ function computeOut(P, vals) {
   ).join("");
 }
 
-/* ---------- LEARN tab: step through the working cycle ---------- */
+/* ---------- LEARN: a guided lesson that plays in the 3D stage ---------- */
 const learnEl = document.getElementById("tabLearn");
-let learnSteps = [], learnIdx = 0, learnKey = null, learnPlay = false, learnTimer = null;
-function partByName(name) { return activeParts.find((p) => p.userData.name === name); }
+const teachEl = document.getElementById("teach");
+const labelEl = document.querySelector(".label");
+let learnSteps = [], learnIdx = 0, learnPlay = false, learnTimer = null, poppedParts = [];
+let flyC = null, flyR = 0;
+function partByRoot(name) { return rootParts.find((p) => p.userData.name === name); }
 function buildCycle(key) {
   const C = CYCLES[key];
-  if (C) return { intro: C.intro, loop: !!C.loop, steps: C.steps };
+  const job = (h) => ({ t: "The job", say: h, focus: [], whole: true });
+  const done = (r) => ({ t: "All together", say: r, focus: [], whole: true });
+  if (C) {
+    const steps = [job(C.hook), ...C.steps.map((s) => ({ ...s, say: s.say || s.body })), done(C.recap || "That's the full cycle — watch it run.")];
+    return { loop: !!C.loop, steps };
+  }
   const P = PHYSICS[key];
-  const intro = P ? `${P.title}. Referenced model: ${P.ref}.` : "How this component works, part by part.";
-  const steps = [];
-  if (P) steps.push({ t: "Governing principle", parts: [], body: "Its behaviour follows one relation:", eq: P.law });
-  for (const p of rootParts) steps.push({ t: p.userData.name, parts: [p.userData.name], body: p.userData.fn, eq: "" });
-  return { intro, loop: false, steps };
+  const hook = P ? `${P.title}. In one line, it obeys:  ${P.law}. Now see how its parts pull that off.` : "See what each part does, one at a time.";
+  const steps = [job(hook)];
+  for (const p of rootParts) steps.push({ t: p.userData.name, focus: [p.userData.name], say: p.userData.fn });
+  steps.push(done("Those parts, working together, are the whole machine."));
+  return { loop: false, steps };
 }
 function loopSVG() {
   return `<div class="loop"><svg viewBox="0 0 260 96">
@@ -710,17 +742,16 @@ function loopSVG() {
   </svg></div>`;
 }
 function renderLearn(key) {
-  learnKey = key; const cyc = buildCycle(key);
+  const cyc = buildCycle(key);
   learnSteps = cyc.steps; learnIdx = 0; learnPlay = false;
   if (learnTimer) { clearInterval(learnTimer); learnTimer = null; }
   learnEl.innerHTML =
     `<div class="learn">
-       <div class="intro">${cyc.intro}</div>
+       <div class="intro">Press <b>Play</b> — the lesson runs in the view: each step lights up the part in play and follows the energy.</div>
        ${cyc.loop ? loopSVG() : ""}
        <div class="dots" id="learnDots"></div>
-       <div id="stepHost"></div>
        <div class="nav">
-         <button id="lPrev">‹ Prev</button>
+         <button id="lPrev">‹ Back</button>
          <button id="lPlay" class="play">▶ Play</button>
          <button id="lNext">Next ›</button>
        </div>
@@ -728,37 +759,59 @@ function renderLearn(key) {
   learnEl.querySelector("#lPrev").onclick = () => learnGo(learnIdx - 1);
   learnEl.querySelector("#lNext").onclick = () => learnGo(learnIdx + 1);
   learnEl.querySelector("#lPlay").onclick = () => learnToggle();
-  learnRenderStep();
+  learnRenderPanel();
   if (curTab === "learn") learnApplyStep();
 }
-function learnRenderStep() {
+function learnRenderPanel() {
   const s = learnSteps[learnIdx]; if (!s) return;
-  learnEl.querySelector("#stepHost").innerHTML =
-    `<div class="stepcard">
-       <div class="st">${s.t}</div>
-       <div class="sb">${s.body}</div>
-       ${s.eq ? `<div class="seq">${s.eq}</div>` : ""}
-       ${s.parts && s.parts.length ? `<div class="chips">${s.parts.map((p) => `<span>${p}</span>`).join("")}</div>` : ""}
-     </div>`;
   const dots = learnEl.querySelector("#learnDots");
-  dots.innerHTML = learnSteps.map((_, i) => `<span class="${i === learnIdx ? "on" : i < learnIdx ? "done" : ""}" data-i="${i}"></span>`).join("");
-  dots.querySelectorAll("span").forEach((d) => (d.onclick = () => learnGo(+d.dataset.i)));
+  if (dots) { dots.innerHTML = learnSteps.map((_, i) => `<span class="${i === learnIdx ? "on" : i < learnIdx ? "done" : ""}" data-i="${i}"></span>`).join("");
+    dots.querySelectorAll("span").forEach((d) => (d.onclick = () => learnGo(+d.dataset.i))); }
   learnEl.querySelectorAll(".loop .node").forEach((n) => n.classList.toggle("on", n.dataset.s === s.stage));
   const pv = learnEl.querySelector("#lPrev"), nx = learnEl.querySelector("#lNext");
   if (pv) pv.disabled = learnIdx === 0; if (nx) nx.disabled = learnIdx === learnSteps.length - 1;
 }
+function stateChips(st) {
+  if (!st) return "";
+  let h = "";
+  if (st.P) h += `<div class="chip ${st.P === "high" ? "hp" : "lp"}"><div class="ck">Pressure</div><div class="cv">${st.P === "high" ? "HIGH" : "LOW"}</div></div>`;
+  if (st.T) h += `<div class="chip ${st.T}"><div class="ck">Temperature</div><div class="cv">${st.T.toUpperCase()}</div></div>`;
+  if (st.phase) h += `<div class="chip ph"><div class="ck">Phase</div><div class="cv">${st.phase}</div></div>`;
+  return h;
+}
+function unpop() { for (const p of poppedParts) p.userData.pinned = false; poppedParts = []; }
+function learnApplyStep() {
+  if (curTab !== "learn" || !learnSteps.length) { teachEl.hidden = true; return; }
+  if (drilled) goBack();                          // lessons run at machine level
+  teachEl.hidden = false;
+  const s = learnSteps[learnIdx];
+  document.getElementById("tKick").textContent = s.t || "";
+  document.getElementById("tSay").textContent = s.say || "";
+  document.getElementById("tState").innerHTML = stateChips(s.state);
+  learnRenderPanel();
+  layoutMode = "cutaway"; expAmt = 0; isolateMode = false;
+  unpop();
+  const fps = (s.focus || []).map(partByRoot).filter(Boolean);
+  if (!fps.length || s.whole) {                   // WHOLE machine — assembled, pulled back
+    deselect(); highlight(-1);
+    for (const p of rootParts) { p.position.copy(p.userData.home); p.scale.set(1, 1, 1); }
+    modelGroup.updateMatrixWorld(true);
+    _lu.makeEmpty(); for (const p of rootParts) { _lb.setFromObject(p); _lu.union(_lb); }
+    const c = _lu.getCenter(new Vector3()), sz = _lu.getSize(new Vector3());
+    flyC = c; flyR = Math.max(sz.x, sz.y, sz.z) * 1.55;
+  } else {                                         // SPOTLIGHT — pop the part out, fly to it
+    fps.forEach((p) => { p.userData.pinned = true; p.position.copy(p.userData.home).addScaledVector(p.userData.dir, 0.6); poppedParts.push(p); });
+    modelGroup.updateMatrixWorld(true);
+    selectPart(fps[0]);
+    if (fps[1]) { const i1 = activeParts.indexOf(fps[1]); if (i1 >= 0) highlight(i1); } else highlight(-1);
+    _lu.makeEmpty(); for (const p of fps) { _lb.setFromObject(p); _lu.union(_lb); }
+    const c = _lu.getCenter(new Vector3()), sz = _lu.getSize(new Vector3());
+    flyC = c; flyR = Math.max(sz.x, sz.y, sz.z) * 2.6 + 1.4;
+  }
+}
 function learnGo(i) {
   learnIdx = Math.max(0, Math.min(learnSteps.length - 1, i));
-  learnRenderStep(); learnApplyStep();
-}
-function learnApplyStep() {
-  if (curTab !== "learn" || !learnSteps.length) return;
-  setLayout("cutaway"); setExplode(0.32);
-  const s = learnSteps[learnIdx], names = s.parts || [];
-  const p0 = names[0] && partByName(names[0]);
-  const p1 = names[1] && partByName(names[1]);
-  if (p0) selectPart(p0); else deselect();
-  if (p1) { const i1 = activeParts.indexOf(p1); if (i1 >= 0) highlight(i1); } else highlight(-1);
+  learnApplyStep();
 }
 function learnToggle() {
   learnPlay = !learnPlay;
@@ -766,7 +819,7 @@ function learnToggle() {
   if (learnPlay) {
     btn.textContent = "❚❚ Pause";
     if (learnIdx >= learnSteps.length - 1) learnGo(0);
-    learnTimer = setInterval(() => { if (learnIdx >= learnSteps.length - 1) { learnToggle(); return; } learnGo(learnIdx + 1); }, 5200);
+    learnTimer = setInterval(() => { if (learnIdx >= learnSteps.length - 1) { learnToggle(); return; } learnGo(learnIdx + 1); }, 6000);
   } else { btn.textContent = "▶ Play"; if (learnTimer) { clearInterval(learnTimer); learnTimer = null; } }
 }
 
@@ -780,7 +833,9 @@ function setTab(t) {
   document.getElementById("tabBtnLearn").classList.toggle("on", t === "learn");
   document.getElementById("tabBtnAnatomy").classList.toggle("on", t === "anatomy");
   document.getElementById("tabBtnPhysics").classList.toggle("on", t === "physics");
+  labelEl.hidden = t === "learn";
   if (t === "learn") learnApplyStep();
+  else { teachEl.hidden = true; if (learnPlay) learnToggle(); unpop(); }
 }
 document.getElementById("tabBtnLearn").onclick = () => setTab("learn");
 document.getElementById("tabBtnAnatomy").onclick = () => setTab("anatomy");
@@ -858,6 +913,7 @@ document.getElementById("btnPhys").onclick = (e) => {
   physOn = !physOn; e.target.classList.toggle("on", physOn);
   physEl.classList.toggle("hidden", !physOn);
   hudEl.classList.toggle("edge", !physOn); countEl.classList.toggle("edge", !physOn);
+  teachEl.classList.toggle("wide", !physOn);
   resize();
 };
 
@@ -872,12 +928,13 @@ function resize() {
 }
 addEventListener("resize", resize);
 
-buildList(); select("ahu"); resize();
+buildList(); select("ahu"); resize(); labelEl.hidden = true;
 function tick() {
   requestAnimationFrame(tick);
   if (spinOn) for (const s of spinners) s.rotation[s.userData.spinAxis || "x"] += 0.18;
   if (selSpin && selPart) selPart.rotation.y += 0.02;
   if (auto && !isolateMode) { az += 0.0035; updateCam(); }
+  if (flyC) { target.lerp(flyC, 0.12); rad += (flyR - rad) * 0.12; updateCam(); if (target.distanceTo(flyC) < 0.05 && Math.abs(rad - flyR) < 0.1) flyC = null; }
   updateExplode();
   renderer.render(scene, camera);
 }
