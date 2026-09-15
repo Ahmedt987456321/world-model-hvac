@@ -128,6 +128,34 @@
   .part.sel .idx { background: #ffb547; color: #2a1c00; }
   .callout.sel { background: #ffb547; color: #241a00; border-color: #ffd694; }
   .callout.sel .cidx { color: #6b4b00; }
+  /* Learn tab */
+  .learn .intro { font-size: 12px; color: #b9cbd6; line-height: 1.55; margin: 2px 0 12px; }
+  .learn .dots { display: flex; gap: 5px; margin-bottom: 10px; }
+  .learn .dots span { height: 4px; flex: 1; border-radius: 3px; background: #22303d; cursor: pointer; }
+  .learn .dots span.on { background: #2fbccb; }
+  .learn .dots span.done { background: #1d5560; }
+  .stepcard { background: #0c1118; border: 1px solid #22303d; border-radius: 10px; padding: 12px 13px; }
+  .stepcard .st { font-size: 13.5px; font-weight: 600; color: #eaffff; }
+  .stepcard .sb { font-size: 12px; color: #b9cbd6; line-height: 1.6; margin: 7px 0 0; }
+  .stepcard .seq { margin: 10px 0 0; background: #071016; border: 1px solid #1d3742; border-radius: 7px;
+    padding: 7px 9px; font-family: "IBM Plex Mono", monospace; font-size: 12px; color: #7fe6f0; text-align: center; }
+  .stepcard .chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+  .stepcard .chips span { font-size: 10.5px; color: #9fdbe4; background: #12242b; border: 1px solid #295a63; border-radius: 20px; padding: 2px 8px; }
+  .learn .nav { display: flex; gap: 6px; margin-top: 11px; }
+  .learn .nav button { flex: 1; font: inherit; font-size: 12px; color: #cdeef2; background: #0e2027;
+    border: 1px solid #295a63; border-radius: 7px; padding: 7px 0; cursor: pointer; }
+  .learn .nav button:hover { background: #17303a; }
+  .learn .nav button.play { flex: 0 0 auto; padding: 7px 12px; color: #06222a; background: #2fbccb; border-color: #7fe6f0; font-weight: 600; }
+  .learn .nav button:disabled { opacity: 0.4; cursor: default; }
+  /* refrigeration loop diagram */
+  .loop { margin: 4px 0 12px; }
+  .loop svg { width: 100%; height: auto; display: block; }
+  .loop .node { fill: #0f1a1f; stroke: #2a4550; stroke-width: 1.5; }
+  .loop .node.on { fill: #14343d; stroke: #2fbccb; stroke-width: 2.5; }
+  .loop .nt { fill: #8fa6b0; font: 8.5px "IBM Plex Mono", monospace; text-anchor: middle; }
+  .loop .node.on + .nt, .loop .nt.on { fill: #7fe6f0; }
+  .loop .edge { stroke: #2a4550; stroke-width: 1.5; fill: none; marker-end: url(#arw); }
+  .loop .edge.on { stroke: #2fbccb; stroke-width: 2.5; }
   /* floating part callouts over the 3D */
   #callouts { position: absolute; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
   .callout { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; cursor: pointer;
@@ -167,12 +195,14 @@
         <div class="ph-tag">Machine</div>
         <h3 id="phTitle">—</h3>
         <div class="ph-tabs">
-          <button id="tabBtnAnatomy" class="on" data-tab="anatomy">Anatomy</button>
+          <button id="tabBtnLearn" class="on" data-tab="learn">Learn</button>
+          <button id="tabBtnAnatomy" data-tab="anatomy">Anatomy</button>
           <button id="tabBtnPhysics" data-tab="physics">Physics</button>
         </div>
       </div>
       <div class="ph-body">
-        <div id="tabAnatomy"></div>
+        <div id="tabLearn"></div>
+        <div id="tabAnatomy" hidden></div>
         <div id="tabPhysics" hidden></div>
       </div>
     </div>
@@ -185,6 +215,7 @@ import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import { BUILD } from "./models3d.js";
 import { PHYSICS } from "./physics3d.js";
 import { ASSEMBLY } from "./parts3d.js";
+import { CYCLES } from "./cycles3d.js";
 
 const {
   Scene, PerspectiveCamera, WebGLRenderer, Group, Mesh, Color, Vector3, Box3,
@@ -314,6 +345,7 @@ function select(key) {
   frame(modelGroup);
   enterLevel(rootParts, null);
   renderPhysics(key);
+  renderLearn(key);
 }
 
 /* ---------- ANATOMY tab: named parts, drill-down, organised explode & inspect ---------- */
@@ -653,14 +685,104 @@ function computeOut(P, vals) {
   ).join("");
 }
 
-/* ---------- tabs ---------- */
-let anatomyTab = true;
-function setTab(t) {
-  anatomyTab = t === "anatomy";
-  anatEl.hidden = !anatomyTab; physBody.hidden = anatomyTab;
-  document.getElementById("tabBtnAnatomy").classList.toggle("on", anatomyTab);
-  document.getElementById("tabBtnPhysics").classList.toggle("on", !anatomyTab);
+/* ---------- LEARN tab: step through the working cycle ---------- */
+const learnEl = document.getElementById("tabLearn");
+let learnSteps = [], learnIdx = 0, learnKey = null, learnPlay = false, learnTimer = null;
+function partByName(name) { return activeParts.find((p) => p.userData.name === name); }
+function buildCycle(key) {
+  const C = CYCLES[key];
+  if (C) return { intro: C.intro, loop: !!C.loop, steps: C.steps };
+  const P = PHYSICS[key];
+  const intro = P ? `${P.title}. Referenced model: ${P.ref}.` : "How this component works, part by part.";
+  const steps = [];
+  if (P) steps.push({ t: "Governing principle", parts: [], body: "Its behaviour follows one relation:", eq: P.law });
+  for (const p of rootParts) steps.push({ t: p.userData.name, parts: [p.userData.name], body: p.userData.fn, eq: "" });
+  return { intro, loop: false, steps };
 }
+function loopSVG() {
+  return `<div class="loop"><svg viewBox="0 0 260 96">
+    <defs><marker id="arw" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2a4550"/></marker></defs>
+    <path class="edge" d="M96,22 H164"/><path class="edge" d="M204,36 V60"/><path class="edge" d="M164,74 H96"/><path class="edge" d="M56,60 V36"/>
+    <rect class="node" data-s="compress" x="18" y="10" width="76" height="24" rx="6"/><text class="nt" x="56" y="25">compress</text>
+    <rect class="node" data-s="condense" x="166" y="10" width="76" height="24" rx="6"/><text class="nt" x="204" y="25">condense</text>
+    <rect class="node" data-s="expand" x="166" y="62" width="76" height="24" rx="6"/><text class="nt" x="204" y="77">expand</text>
+    <rect class="node" data-s="evaporate" x="18" y="62" width="76" height="24" rx="6"/><text class="nt" x="56" y="77">evaporate</text>
+  </svg></div>`;
+}
+function renderLearn(key) {
+  learnKey = key; const cyc = buildCycle(key);
+  learnSteps = cyc.steps; learnIdx = 0; learnPlay = false;
+  if (learnTimer) { clearInterval(learnTimer); learnTimer = null; }
+  learnEl.innerHTML =
+    `<div class="learn">
+       <div class="intro">${cyc.intro}</div>
+       ${cyc.loop ? loopSVG() : ""}
+       <div class="dots" id="learnDots"></div>
+       <div id="stepHost"></div>
+       <div class="nav">
+         <button id="lPrev">‹ Prev</button>
+         <button id="lPlay" class="play">▶ Play</button>
+         <button id="lNext">Next ›</button>
+       </div>
+     </div>`;
+  learnEl.querySelector("#lPrev").onclick = () => learnGo(learnIdx - 1);
+  learnEl.querySelector("#lNext").onclick = () => learnGo(learnIdx + 1);
+  learnEl.querySelector("#lPlay").onclick = () => learnToggle();
+  learnRenderStep();
+  if (curTab === "learn") learnApplyStep();
+}
+function learnRenderStep() {
+  const s = learnSteps[learnIdx]; if (!s) return;
+  learnEl.querySelector("#stepHost").innerHTML =
+    `<div class="stepcard">
+       <div class="st">${s.t}</div>
+       <div class="sb">${s.body}</div>
+       ${s.eq ? `<div class="seq">${s.eq}</div>` : ""}
+       ${s.parts && s.parts.length ? `<div class="chips">${s.parts.map((p) => `<span>${p}</span>`).join("")}</div>` : ""}
+     </div>`;
+  const dots = learnEl.querySelector("#learnDots");
+  dots.innerHTML = learnSteps.map((_, i) => `<span class="${i === learnIdx ? "on" : i < learnIdx ? "done" : ""}" data-i="${i}"></span>`).join("");
+  dots.querySelectorAll("span").forEach((d) => (d.onclick = () => learnGo(+d.dataset.i)));
+  learnEl.querySelectorAll(".loop .node").forEach((n) => n.classList.toggle("on", n.dataset.s === s.stage));
+  const pv = learnEl.querySelector("#lPrev"), nx = learnEl.querySelector("#lNext");
+  if (pv) pv.disabled = learnIdx === 0; if (nx) nx.disabled = learnIdx === learnSteps.length - 1;
+}
+function learnGo(i) {
+  learnIdx = Math.max(0, Math.min(learnSteps.length - 1, i));
+  learnRenderStep(); learnApplyStep();
+}
+function learnApplyStep() {
+  if (curTab !== "learn" || !learnSteps.length) return;
+  setLayout("cutaway"); setExplode(0.32);
+  const s = learnSteps[learnIdx], names = s.parts || [];
+  const p0 = names[0] && partByName(names[0]);
+  const p1 = names[1] && partByName(names[1]);
+  if (p0) selectPart(p0); else deselect();
+  if (p1) { const i1 = activeParts.indexOf(p1); if (i1 >= 0) highlight(i1); } else highlight(-1);
+}
+function learnToggle() {
+  learnPlay = !learnPlay;
+  const btn = learnEl.querySelector("#lPlay");
+  if (learnPlay) {
+    btn.textContent = "❚❚ Pause";
+    if (learnIdx >= learnSteps.length - 1) learnGo(0);
+    learnTimer = setInterval(() => { if (learnIdx >= learnSteps.length - 1) { learnToggle(); return; } learnGo(learnIdx + 1); }, 5200);
+  } else { btn.textContent = "▶ Play"; if (learnTimer) { clearInterval(learnTimer); learnTimer = null; } }
+}
+
+/* ---------- tabs ---------- */
+let curTab = "learn", anatomyTab = false;
+function setTab(t) {
+  curTab = t; anatomyTab = t === "anatomy";
+  document.getElementById("tabLearn").hidden = t !== "learn";
+  anatEl.hidden = t !== "anatomy";
+  physBody.hidden = t !== "physics";
+  document.getElementById("tabBtnLearn").classList.toggle("on", t === "learn");
+  document.getElementById("tabBtnAnatomy").classList.toggle("on", t === "anatomy");
+  document.getElementById("tabBtnPhysics").classList.toggle("on", t === "physics");
+  if (t === "learn") learnApplyStep();
+}
+document.getElementById("tabBtnLearn").onclick = () => setTab("learn");
 document.getElementById("tabBtnAnatomy").onclick = () => setTab("anatomy");
 document.getElementById("tabBtnPhysics").onclick = () => setTab("physics");
 function frame(root) {
