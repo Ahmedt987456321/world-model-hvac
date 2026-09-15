@@ -142,18 +142,49 @@ possible.
 |---|---|---|
 | 1 | Room + HVAC + weather simulator | ✅ this repo |
 | 2 | Visual drag-and-drop world builder over the same engine | ✅ `canvas/` |
-| 3 | Learn model error from real sensor data (hybrid physics + learned residual) | research |
+| 3 | Learn model error from data (hybrid physics + learned residual) | ✅ `wm/learn.py` |
 | 4 | Plan / control a real building safely | long horizon |
 
-Stage 3 is the interesting one:
+## Stage 3: learn where the physics is wrong
+
+The equations are a prior, not the truth. `wm/learn.py` points the model at a
+"real" building — the same engine, but with dynamics the model was never told
+about — and lets it discover what it was missing.
+
+```bash
+python examples/learn_demo.py
+```
+
+```
+Reality has dynamics the model was never told about:
+  hidden load   150 W        (model assumes 0)
+  envelope UA   45 W/K       (model assumes 30)
+  solar aperture 1.2 m²      (model assumes 0.5)
+
+After watching 48 h of reality and fitting a learned residual:
+  discovered:  hidden load +151 W   extra UA +15.1 W/K   extra aperture +0.70 m²
+
+Forward-simulation error against reality (48 h trajectory RMSE):
+  physics only          0.730 °C
+  physics + learned     0.001 °C
+  error reduced by       99.9%
+```
+
+The learned term is a small linear correction in physically-meaningful features,
 
 ```
 x_{t+1} = f_physics(x_t, u_t) + f_learned(x_t, u_t)
-                                 └── the part the equations got wrong ──┘
+f_learned = b0 + b1·(T_out − T) + b2·irradiance
+            └hidden┘  └── ΔUA ──┘   └Δaperture┘
 ```
 
-The engine is structured so a learned residual slots in as just another term in
-`Room.deriv`.
+fit by ordinary least squares (solved by hand — still no dependencies). Because
+the features are physical, the fitted coefficients don't just reduce error, they
+**read out the hidden parameters**: the model recovers the +150 W load, the
+15 W/K of extra envelope loss, and the 0.7 m² of extra solar aperture without
+ever being told they exist. The residual drops straight into `Room` via the
+`residual` slot, so the hybrid model is just the physics model with one more
+term. Pinned by `tests/test_learn.py`.
 
 ## Quickstart
 
